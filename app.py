@@ -28,7 +28,11 @@ def get_db_connection():
 
 UPLOAD_FOLDER_SNACKS = os.path.join('static', 'uploads', 'snacks')
 os.makedirs(UPLOAD_FOLDER_SNACKS, exist_ok=True)
-app = Flask(__name__)
+import os
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+app = Flask(__name__, 
+            template_folder=os.path.join(BASE_DIR, 'templates'),
+            static_folder=os.path.join(BASE_DIR, 'static'))
 app.secret_key = os.getenv("SECRET_KEY", "fallback_secret_for_local_dev")
 
 # CSRF Protection
