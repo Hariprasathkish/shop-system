@@ -1,0 +1,6 @@
+templates/dairy/attendance_sheet.html: OK
+templates/dairy/payroll.html: OK
+templates/snacks/snacks_billing.html: OK
+templates/snacks/snacks_inventory.html: ERROR - expected token 'end of print statement', got ':'
+templates/snacks/snacks_menu.html: ERROR - expected token 'end of print statement', got ':'
+templates/snacks/snacks_stock.html: OK

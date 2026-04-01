@@ -1,0 +1,7 @@
+templates\dairy\attendance_sheet.html: TemplateSyntaxError - expected token 'end of print statement', got ':'
+templates\dairy\payroll.html: TemplateSyntaxError - expected token 'end of print statement', got ':'
+templates\snacks\snacks_accounts.html: TemplateSyntaxError - Encountered unknown tag 'endblock'.
+templates\snacks\snacks_billing.html: TemplateSyntaxError - expected token 'end of print statement', got ':'
+templates\snacks\snacks_inventory.html: TemplateSyntaxError - expected token 'end of print statement', got ':'
+templates\snacks\snacks_menu.html: TemplateSyntaxError - expected token 'end of print statement', got ':'
+templates\snacks\snacks_stock.html: TemplateSyntaxError - expected token 'end of print statement', got ':'

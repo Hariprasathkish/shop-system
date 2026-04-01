@@ -1,0 +1,22 @@
+
+Schema for dairy_extra_notes:
+(0, 'id', 'INTEGER', 0, None, 1)
+(1, 'customer_id', 'INTEGER', 0, None, 0)
+(2, 'month', 'TEXT', 0, None, 0)
+(3, 'notes', 'TEXT', 0, None, 0)
+
+Schema for dairy_logs:
+(0, 'id', 'INTEGER', 0, None, 1)
+(1, 'customer_id', 'INTEGER', 0, None, 0)
+(2, 'date', 'TEXT', 0, 'CURRENT_DATE', 0)
+(3, 'time_slot', 'TEXT', 0, None, 0)
+(4, 'quantity', 'REAL', 0, None, 0)
+(5, 'product_id', 'INTEGER', 0, None, 0)
+
+Schema for dairy_payments:
+(0, 'id', 'INTEGER', 0, None, 1)
+(1, 'customer_id', 'INTEGER', 0, None, 0)
+(2, 'month', 'TEXT', 0, None, 0)
+(3, 'payment_date', 'TEXT', 0, None, 0)
+(4, 'amount', 'REAL', 0, None, 0)
+(5, 'payment_mode', 'TEXT', 0, None, 0)

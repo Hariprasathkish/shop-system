@@ -1,0 +1,170 @@
+
+--- templates/dairy/attendance_sheet.html ---
+{{ all_product_names|tojson|safe }}
+{{ background: '#10b981' }}
+{{ background: '#334155' }}
+{{ background: '#4f46e5' }}
+{{ background: '#ecfdf5', color: '#059669', padding: '0.5rem 1rem', borderRadius: '0.5rem', fontSize: '0.85rem', fontWeight: 600, border: '1px solid #a7f3d0' }}
+{{ background: '#f59e0b' }}
+{{ background: '#fffbeb', border: '1px solid #fef3c7', padding: '6px', borderRadius: '0.5rem', marginBottom: '8px', color: '#92400e', fontSize: '9px' }}
+{{ color: '#6366f1' }}
+{{ color: '#dc2626', fontWeight: 700, fontSize: '0.65rem', marginTop: 3 }}
+{{ customers|tojson|safe }}
+{{ days|tojson|safe }}
+{{ display: 'flex', gap: '1rem', alignItems: 'center' }}
+{{ display: 'flex', gap: 4 }}
+{{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}
+{{ extra_notes|tojson|safe }}
+{{ extra_purchases|tojson|safe }}
+{{ flex: 1 }}
+{{ fontSize: '0.7rem', color: '#64748b' }}
+{{ fontSize: '0.7rem', opacity: 0.8 }}
+{{ fontSize: '1rem' }}
+{{ fontSize: 10, height: 30 }}
+{{ fontSize: 10, height: 30, padding: 2 }}
+{{ fontSize: 9 }}
+{{ fontSize: 9, flex: 1 }}
+{{ fontSize: 9, height: 25 }}
+{{ fontSize: 9, height: 25, padding: 2 }}
+{{ fontSize: 9, padding: '2px 4px' }}
+{{ fontWeight: 600 }}
+{{ fontWeight: 800, color: '#16a34a' }}
+{{ fontWeight: 800, color: '#1e293b' }}
+{{ fontWeight: 800, color: '#6366f1', background: '#eff6ff' }}
+{{ fontWeight: 800, color: '#dc2626' }}
+{{ height: 40, borderRadius: '0.5rem', fontWeight: 700 }}
+{{ logs_map|tojson|safe }}
+{{ margin: '0.25rem 0 0 0' }}
+{{ margin: 0, fontSize: '1.75rem', fontWeight: 800, color: '#0f172a' }}
+{{ margin: 0, fontWeight: 700, fontSize: '0.85rem' }}
+{{ marginTop: 8, padding: 8, background: '#f1f5f9', borderRadius: '0.5rem', border: '1px solid #cbd5e1' }}
+{{ month_str }}
+{{ monthly_totals|tojson|safe }}
+{{ padding: '0.5rem 1rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '1rem' }}
+{{ padding: '0.75rem 2rem', fontWeight: 700, borderRadius: '0.75rem' }}
+{{ padding: '1.5rem', borderRadius: '1rem', background: '#f8fafc' }}
+{{ padding: 10, background: '#f8fafc' }}
+{{ payments|tojson|safe }}
+{{ role }}
+{{ textAlign: 'center', marginTop: '2rem' }}
+{{ unpaid_customers|tojson|safe }}
+{{ width: 140, height: 35 }}
+
+--- templates/dairy/payroll.html ---
+{{ background: '#f8fafc', padding: '0.5rem 1rem', borderRadius: '0.75rem', border: '1px solid #e2e8f0' }}
+{{ borderRadius: '0.5rem', fontWeight: 800 }}
+{{ color: '#6366f1' }}
+{{ display: 'flex', alignItems: 'flex-end' }}
+{{ display: 'flex', gap: '1rem', alignItems: 'center' }}
+{{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}
+{{ fontSize: '0.8rem', marginRight: '0.5rem' }}
+{{ gridColumn: 'span 2' }}
+{{ margin: 0 }}
+{{ margin: 0, fontSize: '0.85rem' }}
+{{ marginRight: '0.5rem', fontWeight: 700 }}
+{{ marginTop: '1rem', marginBottom: 0 }}
+{{ month_str }}
+{{ payroll_entries|tojson|safe }}
+{{ staff_list|tojson|safe }}
+
+--- templates/snacks/snacks_billing.html ---
+{{ background: '#e0f2fe', color: '#0369a1', padding: '6px 12px', borderRadius: '0.75rem', fontSize: '0.75rem', border: '1px solid #bae6fd' }}
+{{ background: '#f1f5f9', color: '#64748b' }}
+{{ background: 'linear-gradient(135deg, #6366f1, #4f46e5)', color: 'white' }}
+{{ background: 'none', border: 'none', color: '#ef4444', marginLeft: 10, cursor: 'pointer' }}
+{{ background: 'rgba(248, 250, 252, 0.5)' }}
+{{ borderRadius: '0.75rem', padding: '0 1rem' }}
+{{ borderTop: '2px dashed #e2e8f0', paddingTop: '1.5rem' }}
+{{ color: '#6366f1', opacity: 0.8, fontSize: '1.2rem', marginBottom: 5 }}
+{{ color: '#f59e0b' }}
+{{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}
+{{ display: 'flex', gap: 12, alignItems: 'center' }}
+{{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}
+{{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}
+{{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem', fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)' }}
+{{ display: 'flex', justifyContent: 'space-between', marginBottom: 15, padding: 10, background: '#f8fafc', borderRadius: 12 }}
+{{ flex: 1, borderRadius: '0.75rem', height: 45 }}
+{{ float: 'right', color: '#10b981' }}
+{{ fontSize: '0.75rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}
+{{ fontSize: '0.7rem', color: '#10b981', fontWeight: 700 }}
+{{ fontSize: '0.85rem', opacity: 0.8 }}
+{{ fontSize: '0.9rem' }}
+{{ fontSize: '2.5rem', marginBottom: 15, opacity: 0.5 }}
+{{ fontSize: '3rem', opacity: 0.1, display: 'block', marginBottom: 10 }}
+{{ fontWeight: 600 }}
+{{ fontWeight: 700, color: '#64748b', fontSize: '0.9rem', marginBottom: '1rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}
+{{ fontWeight: 700, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', color: '#1e293b' }}
+{{ fontWeight: 800, borderBottom: '2px solid #f1f5f9', paddingBottom: '0.75rem', color: '#1e293b', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+{{ fontWeight: 800, marginBottom: 8 }}
+{{ height: 56, borderRadius: '1rem', padding: '0 1.5rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)' }}
+{{ items[:12]|tojson|safe }}
+{{ marginLeft: 10, minWidth: 60, textAlign: 'right' }}
+{{ marginTop: '1.5rem' }}
+{{ marginTop: '1rem', display: 'flex', gap: 10 }}
+{{ minHeight: 200, maxHeight: 400, overflowY: 'auto', marginBottom: '1.5rem' }}
+{{ minWidth: 25, textAlign: 'center', fontWeight: 700 }}
+{{ padding: 40, textAlign: 'center', background: '#fff1f2', color: '#991b1b', border: '2px dashed #f43f5e', borderRadius: '1.5rem' }}
+{{ paddingLeft: '3rem', height: 56, borderRadius: '1rem', border: '2px solid #e2e8f0', fontSize: '1rem', transition: '0.3s' }}
+{{ position: 'absolute', left: '1.25rem', top: '1.25rem', color: '#94a3b8', fontSize: '1.2rem' }}
+{{ position: 'relative' }}
+{{ position: 'relative', flex: 1 }}
+{{ width: 80, textAlign: 'right', border: '1px solid #cbd5e1', borderRadius: 4, padding: '2px 5px' }}
+
+--- templates/snacks/snacks_inventory.html ---
+{{ background: '#f8fafc', fontWeight: 700, borderRadius: '0.75rem', border: '1px solid #e2e8f0' }}
+{{ background: 'white', border: '1px solid #e2e8f0', color: '#475569', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '8px', fontWeight: 700, padding: '0.5rem 1rem', borderRadius: '0.75rem' }}
+{{ borderRadius: '0.75rem' }}
+{{ cursor: 'default' }}
+{{ display: 'flex', gap: '1rem' }}
+{{ fontSize: '2.5rem', background: 'linear-gradient(90deg, #3b82f6, #06b6d4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0 }}
+{{ fontWeight: 800 }}
+{{ items|tojson|safe }}
+{{ marginBottom: '2rem' }}
+{{ textAlign: 'center' }}
+{{ textAlign: 'center', marginBottom: '2rem' }}
+{{ textAlign: 'center', padding: '3rem' }}
+
+--- templates/snacks/snacks_menu.html ---
+{{alignItems: 'start', gap: '2rem'}}
+{{background:'#10b981', color:'white', borderRadius: '8px', padding: '6px 12px', fontWeight: 700}}
+{{background:'#f1f5f9', color:'#6366f1', border: '1px solid #e2e8f0'}}
+{{background:'#f1f5f9', color:'#f59e0b', border: '1px solid #e2e8f0'}}
+{{background:'#fff1f2', color:'#ef4444', border: '1px solid #fecaca'}}
+{{background:'none', border:'none', fontSize: '1.5rem', cursor:'pointer'}}
+{{color: '#6366f1', opacity: 0.3}}
+{{color: '#6366f1'}}
+{{color: '#f59e0b'}}
+{{color:'#f59e0b', marginRight: '10px'}}
+{{display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem'}}
+{{display: 'flex', gap: '8px', marginLeft: '1.5rem'}}
+{{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '1.5rem'}}
+{{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1.5rem'}}
+{{flex: 1}}
+{{fontSize: '0.7rem', color: '#94a3b8', background: '#f8fafc', padding: '2px 6px', borderRadius: '4px'}}
+{{fontSize: '1.1rem', fontWeight: 800, color: '#1e293b'}}
+{{fontSize: '3rem', fontWeight: '800', background: 'linear-gradient(135deg, #f59e0b, #ef4444)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: '0.5rem'}}
+{{fontWeight: 700, color: '#64748b'}}
+{{fontWeight: 700, fontSize: '0.85rem', color: '#64748b'}}
+{{fontWeight: 700}}
+{{fontWeight: 800, marginBottom: '1.5rem'}}
+{{fontWeight: 800}}
+{{gap: '1rem', marginTop: '1rem'}}
+{{height: '50px', borderRadius: '12px', fontWeight: 800, marginTop: '2rem'}}
+{{marginTop:'1.5rem', fontWeight: 700, color: '#94a3b8'}}
+{{maxWidth: '1200px', margin: '0 auto'}}
+{{opacity: 0.1, marginBottom: '1.5rem'}}
+{{padding: '5rem', borderRadius: '1.5rem'}}
+{{textAlign: 'center', marginBottom: '3rem'}}
+{{textAlign: 'center', padding: '5rem'}}
+{{width: '500px', maxWidth: '95vw'}}
+
+--- templates/snacks/snacks_stock.html ---
+{{ color: '#10b981' }}
+{{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}
+{{ fontSize: '0.85rem', color: '#64748b' }}
+{{ fontSize: '0.8rem' }}
+{{ fontWeight: 700 }}
+{{ marginBottom: '1.5rem' }}
+{{ marginBottom: '2rem' }}
+{{ maxHeight: '600px', overflowY: 'auto' }}
+{{ textAlign: 'center', padding: '2rem' }}

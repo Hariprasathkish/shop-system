@@ -1,0 +1,213 @@
+﻿
+app.py:1024:    
+this_month = today.str
+ftime("%Y-%m")
+app.py:1045:        
+period_title = 
+today.strftime("%B 
+%Y")
+app.py:1070:          
+      WHERE 
+strftime('%Y-%m-%d', 
+b2.date) = d) as 
+profit
+app.py:1072:          
+  SELECT 
+strftime('%Y-%m-%d', 
+date) as d, COUNT(*) 
+as bills, 
+SUM(grand_total) as 
+revenue
+app.py:1144:    elemen
+ts.append(Paragraph("R
+eport generated on " 
++ today.strftime("%d-%
+m-%Y %H:%M"), 
+styles['Italic']))
+app.py:1199:    
+month_str = request.ar
+gs.get("month", dateti
+me.date.today().strfti
+me("%Y-%m"))
+app.py:1206:          
+     COALESCE((SELECT 
+SUM(quantity) FROM 
+dairy_logs l WHERE 
+l.customer_id = c.id 
+AND strftime('%Y-%m', 
+l.date) = %s), 0) as 
+total_liters, 
+app.py:1261:    
+month_str = request.ar
+gs.get("month", dateti
+me.date.today().strfti
+me("%Y-%m"))
+app.py:1324:          
+  billing_cycle_desc 
+= f"{cycle_start.strft
+ime('%d-%b-%Y')} → {cy
+cle_end.strftime('%d-%
+b-%Y')}"
+app.py:1334:          
+          elif lg_date
+.strftime('%Y-%m') == 
+month_str:
+app.py:1391:          
+      day_str = 
+edate.strftime("%d") 
+if hasattr(edate, 
+"strftime") else 
+str(edate)[8:]
+app.py:1456:        
+month_str = datetime.d
+atetime.strptime(today
+, '%Y-%m-%d').strftime
+('%Y-%m')
+app.py:1541:    
+month_str = datetime.d
+atetime.strptime(today
+, '%Y-%m-%d').strftime
+('%Y-%m')
+app.py:1657:    
+month_str = request.ar
+gs.get("month", dateti
+me.date.today().strfti
+me("%Y-%m"))
+app.py:1682:        
+LEFT JOIN dairy_logs 
+l ON c.id = 
+l.customer_id AND 
+strftime('%Y-%m', 
+l.date) = %s
+app.py:1728:        
+[Paragraph(f"<b>Total 
+Customers:</b> 
+{customer_count}", 
+normal_style), Paragra
+ph(f"<b>Payment 
+Date:</b> {datetime.da
+te.today().strftime('%
+d-%m-%Y')}", 
+normal_style)]
+app.py:2012:    month 
+= request.args.get("mo
+nth", datetime.datetim
+e.now().strftime("%Y-%
+m"))
+app.py:2270:          
+      day_str = 
+edate.strftime("%d") 
+if hasattr(edate, 
+"strftime") else 
+str(edate)[8:]
+app.py:2280:          
+      day_str = 
+pdate.strftime("%d") 
+if hasattr(pdate, 
+"strftime") else 
+str(pdate)[8:]
+app.py:2309:          
+                  
+day_str = 
+d.strftime("%d") if 
+hasattr(d, 
+"strftime") else 
+str(d)[8:]
+app.py:2316:          
+                  
+day_str = 
+d.strftime("%d") if 
+hasattr(d, 
+"strftime") else 
+str(d)[8:]
+app.py:2376:    
+month_str = request.ar
+gs.get("month", dateti
+me.date.today().strfti
+me("%Y-%m"))
+app.py:2543:    
+month_str = request.ar
+gs.get("month", dateti
+me.date.today().strfti
+me("%Y-%m"))
+app.py:2886:    
+month_str = request.ar
+gs.get("month", dateti
+me.date.today().strfti
+me("%Y-%m"))
+app.py:2904:        
+WHERE 
+l.customer_id=%s AND 
+strftime('%Y-%m', 
+l.date) = %s
+app.py:3026:    
+month_param = request.
+args.get("month", date
+time.date.today().strf
+time("%Y-%m"))
+app.py:3171:          
+      attendance_data.
+append([curr.strftime(
+"%d-%m-%Y"), 
+pinfo["name"], 
+f"{log_qty:.2f}", f"{f
+loat(pinfo['price']):.
+2f}", 
+f"{l_amount:.2f}"])
+app.py:3215:          
+              curr_d.s
+trftime("%d-%m-%Y"),
+app.py:3227:          
+              curr_d.s
+trftime("%d-%m-%Y"),
+app.py:3246:          
+  display_date = edate
+_obj.strftime("%d-%m-%
+Y")
+app.py:3264:    
+prev_month_str = prev_
+month_date.strftime("%
+Y-%m")
+app.py:3298:        [P
+aragraph(f"<b>Customer
+ Name:</b> {cname}", 
+header_style), 
+Paragraph(f"<b>Bill 
+No:</b> HB-{customer_i
+d}-{datetime.date.toda
+y().strftime('%y%m%d')
+}", header_style)],
+app.py:3299:        [P
+aragraph(f"<b>Phone:</
+b> {cphone or 
+'N/A'}", 
+header_style), Paragra
+ph(f"<b>Period:</b> {p
+eriod_start.strftime('
+%d-%m-%Y')} to {period
+_end.strftime('%d-%m-%
+Y')}", header_style)],
+app.py:3301:        
+["", Paragraph(f"<b>Da
+te:</b> {datetime.date
+.today().strftime('%d-
+%m-%Y')}", 
+header_style)]
+app.py:3440:        
+"period": f"{billing_p
+eriod_start.strftime('
+%d/%m/%y')} - {billing
+_period_end.strftime('
+%d/%m/%y')}",
+app.py:3441:        
+"scan_window": f"{scan
+_start.strftime('%d/%m
+/%y')} - {scan_end.str
+ftime('%d/%m/%y')}"
+app.py:3463:    
+month_str = request.ar
+gs.get("month", dateti
+me.date.today().strfti
+me("%Y-%m"))
+
+

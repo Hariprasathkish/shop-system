@@ -1,0 +1,293 @@
+--- Table: snacks_menu ---
+(0, 'id', 'INTEGER', 0, None, 1)
+(1, 'name', 'TEXT', 1, None, 0)
+(2, 'price', 'REAL', 1, None, 0)
+(3, 'stock', 'INTEGER', 1, None, 0)
+(4, 'purchase_price', 'REAL', 1, '0', 0)
+(5, 'retail_price', 'REAL', 1, '0', 0)
+(6, 'wholesale_price', 'REAL', 1, '0', 0)
+(7, 'image_url', 'TEXT', 0, None, 0)
+CREATE SQL: CREATE TABLE snacks_menu (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        price REAL NOT NULL,
+        stock INTEGER NOT NULL
+    , purchase_price REAL NOT NULL DEFAULT 0, retail_price REAL NOT NULL DEFAULT 0, wholesale_price REAL NOT NULL DEFAULT 0, image_url TEXT)
+
+--- Table: sqlite_sequence ---
+(0, 'name', '', 0, None, 0)
+(1, 'seq', '', 0, None, 0)
+CREATE SQL: CREATE TABLE sqlite_sequence(name,seq)
+
+--- Table: snacks_sales ---
+(0, 'id', 'INTEGER', 0, None, 1)
+(1, 'item_id', 'INTEGER', 0, None, 0)
+(2, 'qty', 'INTEGER', 0, None, 0)
+(3, 'total', 'REAL', 0, None, 0)
+(4, 'date', 'TEXT', 0, 'CURRENT_TIMESTAMP', 0)
+CREATE SQL: CREATE TABLE snacks_sales (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id INTEGER,
+        qty INTEGER,
+        total REAL,
+        date TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+
+--- Table: dairy_customers ---
+(0, 'id', 'INTEGER', 0, None, 1)
+(1, 'name', 'TEXT', 1, None, 0)
+(2, 'phone', 'TEXT', 0, None, 0)
+(3, 'address', 'TEXT', 0, None, 0)
+(4, 'product_name', 'TEXT', 0, "'Milk'", 0)
+(5, 'default_qty', 'REAL', 0, '1.0', 0)
+(6, 'price_per_liter', 'REAL', 0, '50.0', 0)
+(7, 'service_charge', 'REAL', 0, '0.0', 0)
+(8, 'delivery_staff_id', 'INTEGER', 0, None, 0)
+(9, 'password', 'TEXT', 0, "'1234'", 0)
+(10, 'delivery_order', 'INTEGER', 0, '9999', 0)
+(11, 'billing_type', 'TEXT', 0, "'current_month'", 0)
+(12, 'last_bill_date', 'TEXT', 0, None, 0)
+(13, 'last_bill_generated_on', 'TEXT', 0, None, 0)
+(14, 'net_payable', 'REAL', 0, '0.0', 0)
+(15, 'email', 'TEXT', 0, None, 0)
+(16, 'custom_id', 'TEXT', 0, None, 0)
+CREATE SQL: CREATE TABLE dairy_customers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        phone TEXT,
+        address TEXT,
+        product_name TEXT DEFAULT 'Milk',
+        default_qty REAL DEFAULT 1.0,
+        price_per_liter REAL DEFAULT 50.0,
+        service_charge REAL DEFAULT 0.0,
+        delivery_staff_id INTEGER, -- Assigned Delivery Person
+        password TEXT DEFAULT '1234', delivery_order INTEGER DEFAULT 9999, billing_type TEXT DEFAULT 'current_month', last_bill_date TEXT, last_bill_generated_on TEXT, net_payable REAL DEFAULT 0.0, email TEXT, custom_id TEXT, -- Default PIN for login
+        FOREIGN KEY(delivery_staff_id) REFERENCES delivery_staff(id)
+    )
+
+--- Table: dairy_logs ---
+(0, 'id', 'INTEGER', 0, None, 1)
+(1, 'customer_id', 'INTEGER', 0, None, 0)
+(2, 'date', 'TEXT', 0, 'CURRENT_DATE', 0)
+(3, 'time_slot', 'TEXT', 0, None, 0)
+(4, 'quantity', 'REAL', 0, None, 0)
+(5, 'product_id', 'INTEGER', 0, None, 0)
+CREATE SQL: CREATE TABLE dairy_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id INTEGER,
+        date TEXT DEFAULT CURRENT_DATE,
+        time_slot TEXT, -- AM / PM
+        quantity REAL, product_id INTEGER,
+        FOREIGN KEY(customer_id) REFERENCES dairy_customers(id)
+    )
+
+--- Table: delivery_staff ---
+(0, 'id', 'INTEGER', 0, None, 1)
+(1, 'username', 'TEXT', 1, None, 0)
+(2, 'password', 'TEXT', 1, None, 0)
+(3, 'name', 'TEXT', 0, None, 0)
+CREATE SQL: CREATE TABLE delivery_staff (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE,
+        password TEXT NOT NULL, -- In production, hash this!
+        name TEXT
+    )
+
+--- Table: attendance_requests ---
+(0, 'id', 'INTEGER', 0, None, 1)
+(1, 'customer_id', 'INTEGER', 0, None, 0)
+(2, 'log_id', 'INTEGER', 0, None, 0)
+(3, 'new_date', 'TEXT', 0, None, 0)
+(4, 'new_time_slot', 'TEXT', 0, None, 0)
+(5, 'new_quantity', 'REAL', 0, None, 0)
+(6, 'reason', 'TEXT', 0, None, 0)
+(7, 'status', 'TEXT', 0, "'Pending'", 0)
+(8, 'admin_response', 'TEXT', 0, None, 0)
+(9, 'staff_id', 'INTEGER', 0, None, 0)
+(10, 'created_at', 'DATETIME', 0, None, 0)
+CREATE SQL: CREATE TABLE attendance_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id INTEGER,
+        log_id INTEGER, -- Optional, if modifying existing log
+        new_date TEXT,
+        new_time_slot TEXT,
+        new_quantity REAL,
+        reason TEXT,
+        status TEXT DEFAULT 'Pending', admin_response TEXT, staff_id INTEGER REFERENCES delivery_staff(id), created_at DATETIME, -- Pending, Approved, Rejected
+        FOREIGN KEY(customer_id) REFERENCES dairy_customers(id)
+    )
+
+--- Table: dairy_extra_notes ---
+(0, 'id', 'INTEGER', 0, None, 1)
+(1, 'customer_id', 'INTEGER', 0, None, 0)
+(2, 'month', 'TEXT', 0, None, 0)
+(3, 'notes', 'TEXT', 0, None, 0)
+CREATE SQL: CREATE TABLE dairy_extra_notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id INTEGER,
+        month TEXT,
+        notes TEXT,
+        FOREIGN KEY(customer_id) REFERENCES dairy_customers(id)
+    )
+
+--- Table: dairy_payments ---
+(0, 'id', 'INTEGER', 0, None, 1)
+(1, 'customer_id', 'INTEGER', 0, None, 0)
+(2, 'month', 'TEXT', 0, None, 0)
+(3, 'payment_date', 'TEXT', 0, None, 0)
+(4, 'amount', 'REAL', 0, None, 0)
+(5, 'payment_mode', 'TEXT', 0, None, 0)
+CREATE SQL: CREATE TABLE dairy_payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id INTEGER,
+        month TEXT, -- YYYY-MM
+        payment_date TEXT,
+        amount REAL,
+        payment_mode TEXT, -- Cash, Online
+        FOREIGN KEY(customer_id) REFERENCES dairy_customers(id)
+    )
+
+--- Table: customer_products ---
+(0, 'id', 'INTEGER', 0, None, 1)
+(1, 'customer_id', 'INTEGER', 0, None, 0)
+(2, 'product_name', 'TEXT', 0, None, 0)
+(3, 'default_qty', 'REAL', 0, None, 0)
+(4, 'price', 'REAL', 0, None, 0)
+(5, 'delivery_order', 'INTEGER', 0, '0', 0)
+CREATE SQL: CREATE TABLE customer_products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            customer_id INTEGER,
+            product_name TEXT,
+            default_qty REAL,
+            price REAL,
+            delivery_order INTEGER DEFAULT 0,
+            FOREIGN KEY(customer_id) REFERENCES dairy_customers(id)
+        )
+
+--- Table: admin_users ---
+(0, 'id', 'INTEGER', 0, None, 1)
+(1, 'username', 'TEXT', 1, None, 0)
+(2, 'password', 'TEXT', 1, None, 0)
+(3, 'name', 'TEXT', 1, None, 0)
+CREATE SQL: CREATE TABLE admin_users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE,
+        password TEXT NOT NULL,
+        name TEXT NOT NULL
+    )
+
+--- Table: dairy_extra_purchases ---
+(0, 'id', 'INTEGER', 0, None, 1)
+(1, 'customer_id', 'INTEGER', 0, None, 0)
+(2, 'date', 'TEXT', 0, None, 0)
+(3, 'product_name', 'TEXT', 0, None, 0)
+(4, 'quantity', 'REAL', 0, None, 0)
+(5, 'rate', 'REAL', 0, None, 0)
+(6, 'amount', 'REAL', 0, None, 0)
+CREATE SQL: CREATE TABLE dairy_extra_purchases (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id INTEGER,
+        date TEXT,
+        product_name TEXT,
+        quantity REAL,
+        rate REAL,
+        amount REAL,
+        FOREIGN KEY(customer_id) REFERENCES dairy_customers(id)
+    )
+
+--- Table: dairy_master_products ---
+(0, 'id', 'INTEGER', 0, None, 1)
+(1, 'name', 'TEXT', 1, None, 0)
+(2, 'default_price', 'REAL', 0, '50.0', 0)
+CREATE SQL: CREATE TABLE dairy_master_products (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        default_price REAL DEFAULT 50.0
+    )
+
+--- Table: snacks_stock_in ---
+(0, 'id', 'INTEGER', 0, None, 1)
+(1, 'item_id', 'INTEGER', 1, None, 0)
+(2, 'qty', 'INTEGER', 1, None, 0)
+(3, 'purchase_price', 'REAL', 1, '0', 0)
+(4, 'supplier', 'TEXT', 0, None, 0)
+(5, 'date', 'TEXT', 0, "date('now')", 0)
+(6, 'notes', 'TEXT', 0, None, 0)
+(7, 'remaining_qty', 'INTEGER', 1, '0', 0)
+CREATE SQL: CREATE TABLE snacks_stock_in (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id INTEGER NOT NULL,
+        qty INTEGER NOT NULL,
+        purchase_price REAL NOT NULL DEFAULT 0,
+        supplier TEXT,
+        date TEXT DEFAULT (date('now')),
+        notes TEXT
+    , remaining_qty INTEGER NOT NULL DEFAULT 0)
+
+--- Table: snacks_bills ---
+(0, 'id', 'INTEGER', 0, None, 1)
+(1, 'bill_mode', 'TEXT', 1, "'retail'", 0)
+(2, 'subtotal', 'REAL', 1, '0', 0)
+(3, 'discount', 'REAL', 1, '0', 0)
+(4, 'grand_total', 'REAL', 1, '0', 0)
+(5, 'customer_name', 'TEXT', 0, "''", 0)
+(6, 'payment_mode', 'TEXT', 0, "'Cash'", 0)
+(7, 'date', 'TEXT', 0, "datetime('now', 'localtime')", 0)
+(8, 'payment_status', 'TEXT', 0, "'Paid'", 0)
+CREATE SQL: CREATE TABLE snacks_bills (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        bill_mode TEXT NOT NULL DEFAULT 'retail',
+        subtotal REAL NOT NULL DEFAULT 0,
+        discount REAL NOT NULL DEFAULT 0,
+        grand_total REAL NOT NULL DEFAULT 0,
+        customer_name TEXT DEFAULT '',
+        payment_mode TEXT DEFAULT 'Cash',
+        date TEXT DEFAULT (datetime('now', 'localtime'))
+    , payment_status TEXT DEFAULT 'Paid')
+
+--- Table: snacks_bill_items ---
+(0, 'id', 'INTEGER', 0, None, 1)
+(1, 'bill_id', 'INTEGER', 1, None, 0)
+(2, 'item_id', 'INTEGER', 1, None, 0)
+(3, 'item_name', 'TEXT', 1, None, 0)
+(4, 'qty', 'INTEGER', 1, None, 0)
+(5, 'unit_price', 'REAL', 1, None, 0)
+(6, 'total', 'REAL', 1, None, 0)
+(7, 'cost_price', 'REAL', 1, '0', 0)
+CREATE SQL: CREATE TABLE snacks_bill_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        bill_id INTEGER NOT NULL,
+        item_id INTEGER NOT NULL,
+        item_name TEXT NOT NULL,
+        qty INTEGER NOT NULL,
+        unit_price REAL NOT NULL,
+        total REAL NOT NULL
+    , cost_price REAL NOT NULL DEFAULT 0)
+
+--- Table: staff_payroll ---
+(0, 'id', 'INTEGER', 0, None, 1)
+(1, 'staff_id', 'INTEGER', 1, None, 0)
+(2, 'month', 'TEXT', 1, None, 0)
+(3, 'base_salary', 'REAL', 0, '0', 0)
+(4, 'commission', 'REAL', 0, '0', 0)
+(5, 'deductions', 'REAL', 0, '0', 0)
+(6, 'bonus', 'REAL', 0, '0', 0)
+(7, 'total_paid', 'REAL', 0, '0', 0)
+(8, 'payment_date', 'TEXT', 0, None, 0)
+(9, 'payment_mode', 'TEXT', 0, None, 0)
+(10, 'notes', 'TEXT', 0, None, 0)
+CREATE SQL: CREATE TABLE staff_payroll (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        staff_id INTEGER NOT NULL,
+        month TEXT NOT NULL,
+        base_salary REAL DEFAULT 0,
+        commission REAL DEFAULT 0,
+        deductions REAL DEFAULT 0,
+        bonus REAL DEFAULT 0,
+        total_paid REAL DEFAULT 0,
+        payment_date TEXT,
+        payment_mode TEXT,
+        notes TEXT,
+        FOREIGN KEY(staff_id) REFERENCES delivery_staff(id)
+    )
+
