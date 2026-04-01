@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Staff{% endblock %}
+
+{% block content %}
+<div class="grid-2">
+    <!-- Add Staff -->
+    <div class="card">
+        <h2><i class="fas fa-user-plus"></i> Add Delivery Staff</h2>
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="add">
+            <div class="form-group">
+                <label>Full Name</label>
+                <input type="text" name="name" required>
+            </div>
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" name="username" required>
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" name="password" required>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Create Account</button>
+        </form>
+    </div>
+
+    <!-- Staff List -->
+    <div class="card">
+        <h2><i class="fas fa-users"></i> Staff List</h2>
+        <ul style="list-style: none; padding: 0;">
+            {% for staff in staff_list %}
+            <li style="border-bottom: 1px solid var(--border); padding: 15px 0;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <div>
+                        <strong>{{ staff[3] }}</strong> <span style="color: var(--text-muted); font-size: 0.9em;">(@{{ staff[1] }})</span>
+                        <span style="background: #10b981; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.8em; margin-left: 10px; font-weight: 700;">
+                            <i class="fas fa-users"></i> {{ staff_customers_map.get(staff[0], [])|length }}
+                        </span>
+                    </div>
+                    <div>
+                        <button
+                            onclick="openEditModal('{{ staff[0] }}', '{{ staff[3] }}', '{{ staff[1] }}')"
+                            class="btn btn-sm btn-secondary">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <form method="POST" style="display: inline;"
+                            onsubmit="return confirm('Delete staff member? Assigned customers will become unassigned.');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="action" value="delete">
+                            <input type="hidden" name="staff_id" value="{{ staff[0] }}">
+                            <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
+                        </form>
+                    </div>
+                </div>
+                <div style="background: var(--bg-hover); padding: 10px; border-radius: 8px; border: 1px dashed var(--border);">
+                    <div style="font-size: 0.75rem; font-weight: 800; color: var(--text-muted); margin-bottom: 5px; text-transform: uppercase;">Assigned Customers</div>
+                    <ul style="list-style: none; padding-left: 0; display: flex; flex-wrap: wrap; gap: 6px; margin: 0;">
+                        {% for cust in staff_customers_map.get(staff[0], []) %}
+                            <li style="background: var(--card-bg); color: var(--text-main); padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border); font-size: 0.85rem; font-weight: 600;">
+                                {{ cust[1] }} <span style="opacity: 0.7; font-size: 0.75rem;">({{ cust[0] }})</span>
+                            </li>
+                        {% else %}
+                            <li style="color: var(--text-muted); font-style: italic; font-size: 0.85rem;">No customers assigned yet.</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </li>
+            {% endfor %}
+
+            {% if unassigned_customers %}
+            <li style="border-bottom: 1px solid var(--border); padding: 15px 0;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <div>
+                        <strong>Unassigned Customers</strong>
+                        <span style="background: #ef4444; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.8em; margin-left: 10px; font-weight: 700;">
+                            <i class="fas fa-exclamation-circle"></i> {{ unassigned_customers|length }}
+                        </span>
+                    </div>
+                </div>
+                <div style="background: rgba(239, 68, 68, 0.05); padding: 10px; border-radius: 8px; border: 1px dashed #ef4444;">
+                    <div style="font-size: 0.75rem; font-weight: 800; color: #ef4444; margin-bottom: 5px; text-transform: uppercase;">Needs Assignment</div>
+                    <ul style="list-style: none; padding-left: 0; display: flex; flex-wrap: wrap; gap: 6px; margin: 0;">
+                        {% for cust in unassigned_customers %}
+                            <li style="background: var(--card-bg); color: var(--text-main); padding: 3px 10px; border-radius: 12px; border: 1px solid #ef4444; font-size: 0.85rem; font-weight: 600;">
+                                {{ cust[1] }} <span style="opacity: 0.7; font-size: 0.75rem;">({{ cust[0] }})</span>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </li>
+            {% endif %}
+        </ul>
+    </div>
+</div>
+
+<div class="card mt-4">
+    <h2><i class="fas fa-tasks"></i> Assign Customers</h2>
+    <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="assign">
+        <div class="grid-2">
+            <div class="form-group">
+                <label>Select Customer</label>
+                <select name="customer_id" required>
+                    {% for customer in customers %}
+                    <option value="{{ customer[0] }}">{{ customer[1] }} (Current Staff ID: {{ customer[8] or 'None' }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Assign To</label>
+                <select name="staff_id" required>
+                    {% for staff in staff_list %}
+                    <option value="{{ staff[0] }}">{{ staff[3] }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <button type="submit" class="btn btn-secondary">Assign Staff</button>
+    </form>
+</div>
+
+<div class="text-center mt-4">
+    <a href="/dairy" class="btn btn-secondary">Back to Dairy Menu</a>
+</div>
+
+<!-- Edit Modal -->
+<div id="editModal" class="modal"
+    style="display:none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4);">
+    <div class="modal-content card" style="margin: 10% auto; padding: 20px; width: 50%; max-width: 500px;">
+        <span onclick="document.getElementById('editModal').style.display='none'"
+            style="float: right; font-size: 28px; cursor: pointer;">&times;</span>
+        <h2>Edit Staff</h2>
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="edit">
+            <input type="hidden" name="staff_id" id="edit_staff_id">
+
+            <div class="form-group">
+                <label>Full Name</label>
+                <input type="text" name="name" id="edit_name" required>
+            </div>
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" name="username" id="edit_username" required>
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" name="password" id="edit_password" placeholder="Leave blank to keep current">
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Update Staff</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    function openEditModal(id, name, username) {
+        document.getElementById('edit_staff_id').value = id;
+        document.getElementById('edit_name').value = name;
+        document.getElementById('edit_username').value = username;
+        document.getElementById('edit_password').value = "";
+        document.getElementById('editModal').style.display = 'block';
+    }
+</script>
+{% endblock %}

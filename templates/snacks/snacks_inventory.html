@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+
+{% block title %}Inventory Statistics{% endblock %}
+
+{% block content %}
+<style>
+    .inventory-container {
+        padding: 20px;
+        animation: fadeIn 0.5s ease-out;
+    }
+
+    .stat-card {
+        background: var(--card-bg);
+        border-radius: 1rem;
+        padding: 1.5rem;
+        text-align: center;
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow-sm);
+        cursor: pointer;
+        transition: all 0.2s;
+        color: var(--text-main);
+    }
+
+    .stat-card:hover {
+        transform: translateY(-4px);
+        box-shadow: var(--shadow);
+    }
+
+    .stat-card.active {
+        border-color: var(--primary);
+        background: var(--status-info-bg);
+    }
+
+    .stat-card.low-stock.active {
+        border-color: var(--danger);
+        background: var(--status-danger-bg);
+    }
+
+    .inventory-table-card {
+        background: var(--card-bg);
+        border-radius: 1rem;
+        border: 1px solid var(--border);
+        margin-top: 2rem;
+        overflow: hidden;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .table-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.5rem;
+        background: var(--grid-sticky-bg);
+        border-bottom: 1px solid var(--border);
+    }
+
+    .search-input {
+        padding: 0.5rem 1rem;
+        border: 1px solid var(--border);
+        border-radius: 0.75rem;
+        width: 300px;
+        background: var(--input-bg);
+        color: var(--text-main);
+    }
+
+    .badge {
+        padding: 0.25rem 0.75rem;
+        border-radius: 1rem;
+        font-weight: 700;
+        font-size: 0.75rem;
+    }
+
+    .badge-out {
+        background: var(--status-danger-bg);
+        color: var(--status-danger-text);
+    }
+
+    .badge-low {
+        background: var(--status-warning-bg);
+        color: var(--status-warning-text);
+    }
+
+    .badge-healthy {
+        background: var(--status-success-bg);
+        color: var(--status-success-text);
+    }
+
+    /* Back Button Style */
+    .btn-back {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        border-radius: 0.75rem;
+        background: var(--surface-solid);
+        color: var(--text-main);
+        text-decoration: none;
+        font-weight: 700;
+        transition: all 0.2s;
+        border: 1px solid var(--border);
+        margin-bottom: 1.5rem;
+    }
+
+    .btn-back:hover {
+        background: var(--background);
+        border-color: var(--primary);
+        transform: translateX(-4px);
+    }
+</style>
+
+<div id="inventory-root"></div>
+
+{% endblock %}
+
+{% block scripts %}
+<script type="text/babel">
+    const { useState, useMemo } = React;
+
+    const InventoryApp = () => {
+        // items: [id, name, purchase_price, retail_price, wholesale_price, stock]
+        const rawItems = JSON.parse('{{ items|tojson|safe }}');
+        const items = rawItems.map(item => ({
+            id: item[0],
+            name: item[1],
+            cost: item[2],
+            retail: item[3],
+            wholesale: item[4],
+            stock: item[5]
+        }));
+
+        const [filter, setFilter] = useState('all'); // all, low, out
+        const [search, setSearch] = useState('');
+
+        const stats = useMemo(() => {
+            return {
+                total: items.length,
+                low: items.filter(i => i.stock > 0 && i.stock < 10).length,
+                out: items.filter(i => i.stock === 0).length,
+                depth: items.reduce((acc, curr) => acc + curr.stock, 0)
+            };
+        }, [items]);
+
+        const filteredItems = useMemo(() => {
+            return items.filter(item => {
+                const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase());
+                if (filter === 'low') return matchesSearch && item.stock > 0 && item.stock < 10;
+                if (filter === 'out') return matchesSearch && item.stock === 0;
+                return matchesSearch;
+            });
+        }, [items, filter, search]);
+
+        return (
+            <div className="inventory-container">
+                <div style={ { marginBottom: '2rem' } }>
+                    <a href="/snacks" className="btn-back">
+                        <i className="fas fa-arrow-left"></i> Back to Snacks Menu
+                    </a>
+                </div>
+                <div style={ { textAlign: 'center', marginBottom: '2rem' } }>
+                    <h1 style={ { fontSize: '2.5rem', background: 'linear-gradient(90deg, var(--primary), var(--accent))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0 } }>
+                        Snacks Inventory
+                    </h1>
+                    <p style={ { color: 'var(--text-muted)' } }>Live stock monitoring and valuation</p>
+                </div>
+
+                <div className="grid-4 mb-4">
+                    <div className={`stat-card ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>
+                        <span style={ { color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' } }>Total Items</span>
+                        <h2 className="m-1">{stats.total}</h2>
+                        <small style={ { color: 'var(--primary)', fontWeight: 700 } }>Show All</small>
+                    </div>
+                    <div className={`stat-card low-stock ${filter === 'low' ? 'active' : ''}`} onClick={() => setFilter('low')}>
+                        <span style={ { color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' } }>Low Stock</span>
+                        <h2 className="m-1" style={ { color: 'var(--warning)' } }>{stats.low}</h2>
+                        <small style={ { color: 'var(--warning)', fontWeight: 700 } }>View Alerts</small>
+                    </div>
+                    <div className={`stat-card ${filter === 'out' ? 'active' : ''}`} onClick={() => setFilter('out')}>
+                        <span style={ { color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' } }>Out of Stock</span>
+                        <h2 className="m-1" style={ { color: 'var(--danger)' } }>{stats.out}</h2>
+                        <small style={ { color: 'var(--danger)', fontWeight: 700 } }>Critical</small>
+                    </div>
+                    <div className="stat-card" style={ { cursor: 'default' } }>
+                        <span style={ { color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' } }>Inventory Depth</span>
+                        <h2 className="m-1" style={ { color: 'var(--success)' } }>{stats.depth}</h2>
+                        <small style={ { color: 'var(--success)', fontWeight: 700 } }>Total Units</small>
+                    </div>
+                </div>
+
+                <div className="inventory-table-card">
+                    <div className="table-header">
+                        <h3 className="m-0" style={ { color: 'var(--text-main)' } }><i className="fas fa-boxes mr-2"></i> Stock List</h3>
+                        <div style={ { display: 'flex', gap: '1rem' } }>
+                            <input
+                                type="text"
+                                placeholder="Search products..."
+                                className="search-input"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                            />
+                            <a href="/snacks/stock" className="btn btn-primary" style={ { borderRadius: '0.75rem' } }>
+                                <i className="fas fa-plus mr-2"></i> Inward
+                            </a>
+                        </div>
+                    </div>
+
+                    <div className="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Product Name</th>
+                                    <th>Cost</th>
+                                    <th>Retail</th>
+                                    <th>Wholesale</th>
+                                    <th style={ { textAlign: 'center' } }>Stock</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredItems.map(item => (
+                                    <tr key={item.id}>
+                                        <td style={ { fontWeight: 800, color: 'var(--text-main)' } }>{item.name}</td>
+                                        <td style={ { color: 'var(--text-main)' } }>₹{item.cost?.toFixed(2)}</td>
+                                        <td style={ { color: 'var(--text-main)' } }>₹{item.retail?.toFixed(2)}</td>
+                                        <td style={ { color: 'var(--text-main)' } }>₹{item.wholesale?.toFixed(2)}</td>
+                                        <td style={ { textAlign: 'center' } }>
+                                            <span style={ {
+                                                fontSize: '1.1rem',
+                                                fontWeight: 800,
+                                                color: item.stock === 0 ? 'var(--danger)' : item.stock < 10 ? 'var(--warning)' : 'var(--success)'
+                                            } }>
+                                                {item.stock}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            {item.stock === 0 ? (
+                                                <span className="badge badge-out">Out of Stock</span>
+                                            ) : item.stock < 10 ? (
+                                                <span className="badge badge-low">Low Stock</span>
+                                            ) : (
+                                                <span className="badge badge-healthy">Healthy</span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                                {filteredItems.length === 0 && (
+                                    <tr><td colSpan="6" style={ { textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' } }>No items found.</td></tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div className="text-center mt-5">
+                    <a href="/admin" className="btn btn-secondary">
+                        <i className="fas fa-home mr-2"></i> Admin Dashboard
+                    </a>
+                </div>
+            </div>
+        );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('inventory-root'));
+    root.render(<InventoryApp />);
+</script>
+{% endblock %}

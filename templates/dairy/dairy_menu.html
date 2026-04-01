@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Dairy Management{% endblock %}
+
+{% block content %}
+<div style="text-align: center; margin-bottom: 3rem; animation: fadeIn 0.8s ease-out;">
+    <h1 style="font-size: 2.5rem; background: linear-gradient(90deg, var(--primary), #ec4899); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">Milk Business Management</h1>
+    <p class="text-muted">Manage your daily milk deliveries and customers</p>
+</div>
+
+<div class="grid-3 mt-4">
+    <!-- Manage Customers -->
+    <a href="/dairy/customers" class="card text-center" style="text-decoration: none; color: inherit;">
+        <i class="fas fa-users dashboard-icon" style="color: var(--primary-dark);"></i>
+        <h3>Customers</h3>
+        <p class="text-muted">Add/Edit customers & products</p>
+    </a>
+
+    <!-- Attendance Card -->
+    <a href="/dairy/attendance" class="card text-center" style="text-decoration: none; color: inherit;">
+        <i class="fas fa-clipboard-list dashboard-icon" style="color: var(--primary);"></i>
+        <h3>Attendance & Logs</h3>
+        <p class="text-muted">Log daily milk entries for customers</p>
+    </a>
+
+    <!-- Billing Card -->
+    <a href="/dairy/report/monthly" class="card text-center" style="text-decoration: none; color: inherit;">
+        <i class="fas fa-file-invoice-dollar dashboard-icon" style="color: var(--success);"></i>
+        <h3>Reports</h3>
+        <p class="text-muted">Download monthly CSV reports</p>
+    </a>
+
+    <!-- Accounts Card -->
+    <a href="/dairy/accounts" class="card text-center" style="text-decoration: none; color: inherit;">
+        <i class="fas fa-chart-line dashboard-icon" style="color: var(--warning);"></i>
+        <h3>Accounts</h3>
+        <p class="text-muted">Overview of earnings and stats</p>
+    </a>
+
+    <!-- Staff Card -->
+    <a href="/dairy/staff" class="card text-center" style="text-decoration: none; color: inherit;">
+        <i class="fas fa-users-cog dashboard-icon" style="color: var(--secondary);"></i>
+        <h3>Delivery Staff</h3>
+        <p class="text-muted">Manage staff & assignments</p>
+    </a>
+
+    <!-- Request Card -->
+    <a href="/dairy/requests" class="card text-center" style="text-decoration: none; color: inherit;">
+        <i class="fas fa-envelope-open-text dashboard-icon" style="color: var(--danger);"></i>
+        <h3>Customer Requests</h3>
+        <p class="text-muted">Check what customers are asking</p>
+    </a>
+
+    <!-- Extra Products Management -->
+    <a href="/dairy/products" class="card text-center" style="text-decoration: none; color: inherit;">
+        <i class="fas fa-box-open dashboard-icon" style="color: #6ad5be;"></i>
+        <h3>Master Products</h3>
+        <p class="text-muted">Manage available tracking items</p>
+    </a>
+
+    <!-- Staff Payroll Card -->
+    <a href="/dairy/payroll" class="card text-center" style="text-decoration: none; color: inherit;">
+        <i class="fas fa-money-check-alt dashboard-icon" style="color: #6366f1;"></i>
+        <h3>Staff Payroll</h3>
+        <p class="text-muted">Track salary, commission & bonuses</p>
+    </a>
+
+    <!-- Monthly Grid Sheet -->
+    <a href="/dairy/sheet" class="card text-center" style="text-decoration: none; color: inherit;">
+        <i class="fas fa-calendar-alt dashboard-icon" style="color: #9b59b6;"></i>
+        <h3>Monthly Grid</h3>
+        <p class="text-muted">View & edit monthly attendance</p>
+    </a>
+</div>
+
+<div class="text-center mt-4" style="margin-top: 4rem;">
+    <a href="/admin" class="btn btn-secondary" style="background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; font-weight: 700; border-radius: 0.75rem;">
+        <i class="fas fa-arrow-left mr-2"></i> Back to Admin Dashboard
+    </a>
+</div>
+{% endblock %}

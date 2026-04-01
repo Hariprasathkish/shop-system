@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+{% block title %}Products Management{% endblock %}
+{% block content %}
+<div id="root"></div>
+{% endblock %}
+
+{% block scripts %}
+<script type="text/babel">
+    const { useState, useEffect } = React;
+
+    const ProductList = () => {
+        const [items, setItems] = useState([]);
+        const [loading, setLoading] = useState(true);
+        const [showEditModal, setShowEditModal] = useState(false);
+        const [editItem, setEditItem] = useState(null);
+        const [formData, setFormData] = useState({
+            name: '', purchase_price: '', retail_price: '', wholesale_price: '', stock: '', image: null
+        });
+
+        useEffect(() => {
+            fetchItems();
+        }, []);
+
+        const fetchItems = async () => {
+            setLoading(true);
+            try {
+                const res = await fetch('/api/snacks/products');
+                const data = await res.json();
+                setItems(data);
+            } catch (err) { console.error("Error fetching items:", err); }
+            setLoading(false);
+        };
+
+        const handleAdd = async (e) => {
+            e.preventDefault();
+            const data = new FormData();
+            data.append('name', formData.name);
+            data.append('purchase_price', formData.purchase_price);
+            data.append('retail_price', formData.retail_price);
+            data.append('wholesale_price', formData.wholesale_price);
+            data.append('stock', formData.stock);
+            if (formData.image) data.append('image', formData.image);
+
+            const csrfToken = "{{ csrf_token() }}";
+            try {
+                const res = await fetch('/api/snacks/products', {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken },
+                    body: data
+                });
+                if (res.ok) {
+                    setFormData({ name: '', purchase_price: '', retail_price: '', wholesale_price: '', stock: '', image: null });
+                    const fileInput = document.getElementById('add-image-input');
+                    if(fileInput) fileInput.value = "";
+                    fetchItems();
+                } else {
+                    const errData = await res.json();
+                    alert(errData.error || "Failed to add product");
+                }
+            } catch (err) { console.error("Error adding item:", err); }
+        };
+
+        const handleEdit = async (e) => {
+            e.preventDefault();
+            const data = new FormData();
+            data.append('id', editItem.id);
+            data.append('name', editItem.name);
+            data.append('purchase_price', editItem.purchase_price);
+            data.append('retail_price', editItem.retail_price);
+            data.append('wholesale_price', editItem.wholesale_price);
+            data.append('stock', editItem.stock);
+            if (editItem.image) data.append('image', editItem.image);
+
+            const csrfToken = "{{ csrf_token() }}";
+            try {
+                const res = await fetch('/api/snacks/products', {
+                    method: 'PUT',
+                    headers: { 'X-CSRFToken': csrfToken },
+                    body: data
+                });
+                if (res.ok) {
+                    setShowEditModal(false);
+                    fetchItems();
+                } else {
+                    const errData = await res.json();
+                    alert(errData.error || "Failed to update product");
+                }
+            } catch (err) { console.error("Error updating item:", err); }
+        };
+
+        const handleDelete = async (id, name) => {
+            if (!confirm(`Delete ${name}?`)) return;
+            const csrfToken = "{{ csrf_token() }}";
+            try {
+                const res = await fetch(`/api/snacks/products?id=${id}`, {
+                    method: 'DELETE',
+                    headers: { 'X-CSRFToken': csrfToken }
+                });
+                if (res.ok) fetchItems();
+            } catch (err) { console.error("Error deleting item:", err); }
+        };
+
+        const openEdit = (item) => {
+            setEditItem({ ...item });
+            setShowEditModal(true);
+        };
+
+        return (
+            <div className="container" style={ {maxWidth: '1200px', margin: '0 auto'} }>
+                <style>{`
+                    .product-card { display: flex; align-items: center; justify-content: space-between; padding: 1.25rem 1.5rem; border-radius: 1.5rem; background: var(--card-bg); border: 1px solid var(--border); margin-bottom: 1rem; transition: transform 0.2s, box-shadow 0.2s; box-shadow: var(--shadow-sm); }
+                    .product-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+                    .badge-stock { padding: 4px 12px; border-radius: 99px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+                    .badge-ok { background: var(--status-success-bg); color: var(--status-success-text); border: 1px solid var(--border); }
+                    .badge-low { background: var(--status-warning-bg); color: var(--status-warning-text); border: 1px solid var(--border); }
+                    .badge-zero { background: var(--status-danger-bg); color: var(--status-danger-text); border: 1px solid var(--border); }
+                    .price-pill { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 99px; font-size: 0.75rem; font-weight: 700; margin-right: 6px; }
+                    .pill-retail { background: var(--status-info-bg); color: var(--status-info-text); }
+                    .pill-wholesale { background: var(--status-info-bg); opacity: 0.9; color: var(--status-info-text); }
+                    .pill-purchase { background: var(--status-success-bg); color: var(--status-success-text); }
+                    .modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(4px); z-index: 1000; display: flex; align-items: center; justify-content: center; animation: fadeIn 0.3s; }
+                    .card-add { position: sticky; top: 1rem; }
+                    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+                `}</style>
+
+                <div style={ {textAlign: 'center', marginBottom: '3rem'} }>
+                    <h1 style={ {fontSize: '3rem', fontWeight: '800', background: 'linear-gradient(135deg, var(--warning), var(--accent))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: '0.5rem'} }>Product Catalogue</h1>
+                    <p style={ {color: 'var(--text-muted)'} }>Dynamic Management Dashboard</p>
+                </div>
+
+                <div className="grid-2" style={ {alignItems: 'start', gap: '2rem'} }>
+                    {/* Add Product Form */}
+                    <div className="card card-add" style={ {background: 'var(--card-bg)', border: '1px solid var(--border)'} }>
+                        <h3 style={ {fontWeight: 800, marginBottom: '1.5rem', color: 'var(--text-main)'} }><i className="fas fa-plus-circle" style={ {color:'var(--warning)', marginRight: '10px'} }></i>Add Product</h3>
+                        <form onSubmit={handleAdd}>
+                            <div className="form-group">
+                                <label style={ {fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-muted)'} }>Product Name</label>
+                                <input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="e.g. Potato Chips 50g" className="form-control" style={ {background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'} } required />
+                            </div>
+                            <div className="grid-2" style={ {gap: '1rem', marginTop: '1rem'} }>
+                                <div className="form-group">
+                                    <label style={ {fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-muted)'} }>Retail (₹)</label>
+                                    <input type="number" step="0.01" value={formData.retail_price} onChange={e => setFormData({...formData, retail_price: e.target.value})} placeholder="MRP" className="form-control" style={ {background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'} } required />
+                                </div>
+                                <div className="form-group">
+                                    <label style={ {fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-muted)'} }>Purchase (₹)</label>
+                                    <input type="number" step="0.01" value={formData.purchase_price} onChange={e => setFormData({...formData, purchase_price: e.target.value})} placeholder="Cost" className="form-control" style={ {background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'} } required />
+                                </div>
+                            </div>
+                            <div className="grid-2" style={ {gap: '1rem', marginTop: '1rem'} }>
+                                <div className="form-group">
+                                    <label style={ {fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-muted)'} }>Wholesale (₹)</label>
+                                    <input type="number" step="0.01" value={formData.wholesale_price} onChange={e => setFormData({...formData, wholesale_price: e.target.value})} placeholder="Bulk" className="form-control" style={ {background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'} } required />
+                                </div>
+                                <div className="form-group">
+                                    <label style={ {fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-muted)'} }>Stock (qty)</label>
+                                    <input type="number" value={formData.stock} onChange={e => setFormData({...formData, stock: e.target.value})} placeholder="0" className="form-control" style={ {background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'} } required />
+                                </div>
+                            </div>
+                            <div className="form-group" style={ {marginTop: '1rem'} }>
+                                <label style={ {fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-muted)'} }>Product Image (Optional, max 2MB)</label>
+                                <input type="file" id="add-image-input" accept="image/*" onChange={e => setFormData({...formData, image: e.target.files[0]})} className="form-control" style={ {background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', padding: '10px'} } />
+                            </div>
+                            <button type="submit" className="btn btn-warning btn-block" style={ {height: '50px', borderRadius: '12px', fontWeight: 800, marginTop: '2rem'} }><i className="fas fa-save mr-2"></i> Save Product</button>
+                        </form>
+                    </div>
+
+                    {/* Product List */}
+                    <div>
+                        <div style={ {display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1.5rem'} }>
+                            <h3 style={ {fontWeight: 800, color: 'var(--text-main)'} }><i className="fas fa-list mr-2" style={ {color: 'var(--primary)'} }></i>Inventory ({items.length})</h3>
+                            <a href="/snacks/stock" className="btn btn-sm" style={ {background:'var(--status-success-bg)', color:'var(--status-success-text)', borderRadius: '8px', padding: '6px 12px', fontWeight: 700, border: '1px solid var(--border)'} }><i className="fas fa-truck-loading mr-2"></i>Receive Stock</a>
+                        </div>
+                        
+                        {loading ? (
+                            <div style={ {textAlign: 'center', padding: '5rem'} }>
+                                <i className="fas fa-circle-notch fa-spin fa-3x" style={ {color: 'var(--primary)', opacity: 0.3} }></i>
+                                <p style={ {marginTop:'1.5rem', fontWeight: 700, color: 'var(--text-muted)'} }>Syncing data...</p>
+                            </div>
+                        ) : items.length === 0 ? (
+                            <div className="card text-center text-muted" style={ {padding: '5rem', borderRadius: '1.5rem', background: 'var(--card-bg)', border: '1px solid var(--border)'} }>
+                                <i className="fas fa-box-open fa-4x" style={ {opacity: 0.1, marginBottom: '1.5rem'} }></i>
+                                <h5 style={ {fontWeight: 700, color: 'var(--text-main)'} }>No products registered</h5>
+                                <p style={ {color: 'var(--text-muted)'} }>Start adding products using the form on the left</p>
+                            </div>
+                        ) : (
+                            items.map(item => (
+                                <div key={item.id} className="product-card">
+                                    <div style={ {display: 'flex', gap: '1.2rem', alignItems: 'center', flex: 1} }>
+                                        <div style={ {width: '80px', height: '80px', borderRadius: '16px', overflow: 'hidden', flexShrink: 0, border: '1px solid var(--border)', background: 'var(--surface-solid)', display: 'flex', alignItems: 'center', justifyContent: 'center'} }>
+                                            {item.image_url ? (
+                                                <img src={item.image_url} alt={item.name} style={ {width: '100%', height: '100%', objectFit: 'cover'} } />
+                                            ) : (
+                                                <i className="fas fa-hamburger fa-2x" style={ {color: 'var(--text-muted)', opacity: 0.5} }></i>
+                                            )}
+                                        </div>
+                                        <div style={ {flex: 1} }>
+                                            <div style={ {display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem'} }>
+                                                <span style={ {fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-main)'} }>{item.name}</span>
+                                                <span className={`badge-stock ${item.stock === 0 ? 'badge-zero' : item.stock < 10 ? 'badge-low' : 'badge-ok'}`}>
+                                                    {item.stock} Available
+                                                </span>
+                                            </div>
+                                            <div>
+                                                <span className="price-pill pill-purchase">Cost: ₹{item.purchase_price.toFixed(2)}</span>
+                                                <span className="price-pill pill-retail">Retail: ₹{item.retail_price.toFixed(2)}</span>
+                                                <span className="price-pill pill-wholesale">Wholesale: ₹{item.wholesale_price.toFixed(2)}</span>
+                                                <code style={ {fontSize: '0.7rem', color: 'var(--text-muted)', background: 'var(--surface-solid)', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border)'} }>ID #{item.id}</code>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div style={ {display: 'flex', gap: '8px', marginLeft: '1.5rem'} }>
+                                        <a href={`/snacks/barcode/${item.id}`} className="btn btn-sm" style={ {background:'var(--surface-solid)', color:'var(--primary)', border: '1px solid var(--border)'} } title="Barcode">
+                                            <i className="fas fa-barcode"></i>
+                                        </a>
+                                        <button onClick={() => openEdit(item)} className="btn btn-sm" style={ {background:'var(--surface-solid)', color:'var(--warning)', border: '1px solid var(--border)'} } title="Edit">
+                                            <i className="fas fa-edit"></i>
+                                        </button>
+                                        <button onClick={() => handleDelete(item.id, item.name)} className="btn btn-sm" style={ {background:'var(--status-danger-bg)', color:'var(--status-danger-text)', border: '1px solid var(--border)'} } title="Delete">
+                                            <i className="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+
+                {/* Edit Modal */}
+                {showEditModal && editItem && (
+                    <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
+                        <div className="card" style={ {width: '500px', maxWidth: '95vw', background: 'var(--card-bg)', border: '1px solid var(--border)'} } onClick={e => e.stopPropagation()}>
+                            <div style={ {display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '1.5rem'} }>
+                                <h3 style={ {fontWeight: 800, color: 'var(--text-main)'} }><i className="fas fa-edit mr-2" style={ {color: 'var(--warning)'} }></i>Edit Product</h3>
+                                <button onClick={() => setShowEditModal(false)} style={ {background:'none', border:'none', fontSize: '1.5rem', cursor:'pointer', color: 'var(--text-main)'} }>&times;</button>
+                            </div>
+                            <form onSubmit={handleEdit}>
+                                <div className="form-group">
+                                    <label style={ {fontWeight: 700, color: 'var(--text-muted)'} }>Product Name</label>
+                                    <input type="text" value={editItem.name} onChange={e => setEditItem({...editItem, name: e.target.value})} className="form-control" style={ {background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'} } required />
+                                </div>
+                                <div className="grid-2" style={ {gap: '1rem', marginTop: '1rem'} }>
+                                    <div className="form-group">
+                                        <label style={ {fontWeight: 700, color: 'var(--text-muted)'} }>Retail Price (₹)</label>
+                                        <input type="number" step="0.01" value={editItem.retail_price} onChange={e => setEditItem({...editItem, retail_price: e.target.value})} className="form-control" style={ {background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'} } required />
+                                    </div>
+                                    <div className="form-group">
+                                        <label style={ {fontWeight: 700, color: 'var(--text-muted)'} }>Purchase Price (₹)</label>
+                                        <input type="number" step="0.01" value={editItem.purchase_price} onChange={e => setEditItem({...editItem, purchase_price: e.target.value})} className="form-control" style={ {background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'} } required />
+                                    </div>
+                                </div>
+                                <div className="grid-2" style={ {gap: '1rem', marginTop: '1rem'} }>
+                                    <div className="form-group">
+                                        <label style={ {fontWeight: 700, color: 'var(--text-muted)'} }>Wholesale Price (₹)</label>
+                                        <input type="number" step="0.01" value={editItem.wholesale_price} onChange={e => setEditItem({...editItem, wholesale_price: e.target.value})} className="form-control" style={ {background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'} } required />
+                                    </div>
+                                    <div className="form-group">
+                                        <label style={ {fontWeight: 700, color: 'var(--text-muted)'} }>Current Stock</label>
+                                        <input type="number" value={editItem.stock} onChange={e => setEditItem({...editItem, stock: e.target.value})} className="form-control" style={ {background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'} } required />
+                                    </div>
+                                </div>
+                                <div className="form-group" style={ {marginTop: '1rem'} }>
+                                    <label style={ {fontWeight: 700, color: 'var(--text-muted)'} }>Update Image (Optional, max 2MB)</label>
+                                    <input type="file" accept="image/*" onChange={e => setEditItem({...editItem, image: e.target.files[0]})} className="form-control" style={ {background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', padding: '10px'} } />
+                                </div>
+                                <button type="submit" className="btn btn-warning btn-block" style={ {height: '50px', borderRadius: '12px', fontWeight: 800, marginTop: '2rem'} }><i className="fas fa-save mr-2"></i> Update Product</button>
+                            </form>
+                        </div>
+                    </div>
+                )}
+                
+                <div className="text-center mt-5">
+                    <a href="/admin" className="btn btn-secondary" style={ {
+                        borderRadius: '0.75rem', 
+                        padding: '0.75rem 1.5rem', 
+                        background: 'var(--surface-solid)', 
+                        color: 'var(--text-main)', 
+                        border: '1px solid var(--border)',
+                        fontWeight: 700,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.5rem'
+                    } }>
+                        <i className="fas fa-arrow-left"></i> Return to Admin Dashboard
+                    </a>
+                </div>
+            </div>
+        );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<ProductList />);
+</script>
+{% endblock %}

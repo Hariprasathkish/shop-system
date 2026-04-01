@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}Daily Attendance Log | Hari Sakthi{% endblock %}
+
+{% block content %}
+<div class="animate-fade-in" style="margin-bottom: 3rem;">
+    <a href="/admin" class="btn btn-secondary" style="background: var(--surface); border: 1px solid var(--border); color: var(--text-main); text-decoration: none; display: inline-flex; align-items: center; gap: 8px; font-weight: 700; padding: 0.5rem 1rem; border-radius: 0.75rem; margin-bottom: 1.5rem;">
+        <i class="fas fa-arrow-left"></i> Back to Dashboard
+    </a>
+    <h1 class="text-gradient">Log Daily Entries</h1>
+    <p style="color: var(--text-muted);">Quickly record milk distribution for any date.</p>
+</div>
+
+<div class="grid-2 animate-fade-in" style="align-items: flex-start; gap: 3rem;">
+    <!-- Log Form Card -->
+    <div class="card" style="padding: 2.5rem;">
+        <h2 style="margin-bottom: 2rem; display: flex; align-items: center; gap: 1rem; color: var(--text-main);"><i class="fas fa-pen-nib text-gradient"></i> Quick Entry</h2>
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="log">
+            <input type="hidden" name="log_customer_id" id="log_customer_id">
+            
+            <div class="form-group">
+                <label><i class="fas fa-user-circle"></i> Select Customer</label>
+                <select id="customer_select" onchange="document.getElementById('log_customer_id').value = this.value" required>
+                    <option value="">-- Search Customer --</option>
+                    {% for customer in customers %}
+                    <option value="{{ customer[0] }}">{{ customer[1] }} ({{ customer[2] }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="grid-2">
+                <div class="form-group">
+                    <label><i class="fas fa-calendar-day"></i> Attendance Date</label>
+                    <input type="date" name="log_date" id="log_date" required>
+                </div>
+                <div class="form-group" style="display: none;">
+                    <label><i class="fas fa-clock"></i> Time Slot</label>
+                    <input type="hidden" name="time_slot" value="AM">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label><i class="fas fa-tint"></i> Quantity</label>
+                <input type="number" step="0.5" name="quantity" placeholder="e.g., 2" required>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block" style="margin-top: 2.5rem; height: 4rem; font-size: 1.1rem; border-radius: 1.25rem;">
+                <i class="fas fa-save"></i> Save Daily Entry
+            </button>
+        </form>
+    </div>
+
+    <!-- Today's Activity Card -->
+    <div class="card glass" style="background: var(--primary-light); border: 2px dashed var(--primary); padding: 2.5rem;">
+        <h2 style="margin-bottom: 2.5rem; color: var(--text-main);"><i class="fas fa-history text-gradient"></i> Today's History</h2>
+        
+        <div class="table-container" style="background: var(--surface-solid); border: 1px solid var(--border);">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="font-size: 0.85rem;">Login ID</th>
+                        <th style="font-size: 0.85rem;">Customer</th>
+                        <th style="font-size: 0.85rem;">Qty</th>
+                        <th style="font-size: 0.85rem;">Slot</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr>
+                        <td><span class="badge" style="background:var(--primary); color:white; font-size:0.7rem;">{{ log[4] }}</span></td>
+                        <td><strong>{{ log[1] }}</strong></td>
+                        <td><span class="badge badge-success">{{ log[2] }}</span></td>
+                        <td><small class="text-muted" style="font-weight: 700;">{{ log[3] }}</small></td>
+                    </tr>
+                    {% endfor %}
+                    {% if not logs %}
+                    <tr><td colspan="4" class="text-center text-muted">No logs recorded yet today.</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Auto-fill today's date
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('log_date').value = today;
+</script>
+{% endblock %}

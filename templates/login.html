@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block title %}Authenticating... | Hari Sakthi{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: center; align-items: center; min-height: 85vh; padding: 1rem;">
+    <div class="card auth-card animate-fade-in" style="width: 100%; max-width: 380px; padding: 2rem; text-align: center; border-radius: 1.25rem; border: 1px solid var(--border); box-shadow: var(--shadow-lg); background: var(--surface);">
+        
+        <img src="{{ url_for('static', filename='logo.png') }}" alt="Hari Sakthi" style="width: 70px; margin-bottom: 1.25rem;">
+        
+        <h1 class="text-gradient" style="font-size: 1.5rem; margin-bottom: 0.2rem;">Welcome</h1>
+        <p style="color: var(--text-muted); font-weight: 500; font-size: 0.85rem; margin-bottom: 1.75rem;">Hari Sakthi Admin Portal</p>
+        
+        <!-- Flash / Error Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+            <div class="auth-error-banner animate-shake" style="
+                display: flex; align-items: center; gap: 0.6rem;
+                background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.45);
+                color: #ef4444; border-radius: 0.75rem;
+                padding: 0.75rem 1rem; margin-bottom: 1.25rem;
+                font-size: 0.85rem; font-weight: 600; text-align: left;">
+                <i class="fas fa-exclamation-circle" style="font-size: 1rem; flex-shrink:0;"></i>
+                <span>{{ message }}</span>
+            </div>
+            {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <form action="/login" method="POST" id="loginForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-group" style="margin-bottom: 1.5rem;">
+                <label style="text-align: left; font-size: 0.8rem; color: var(--primary); display: block; margin-bottom: 0.5rem;"><i class="fas fa-id-card"></i> Login as</label>
+                <input type="hidden" name="role" id="roleInput" value="admin">
+                <div class="role-picker" style="display: flex; gap: 0.35rem;">
+                    <button type="button" onclick="setRole('admin')" class="role-btn active" id="btn-admin" style="flex: 1;">Owner</button>
+                    <button type="button" onclick="setRole('customer')" class="role-btn" id="btn-customer" style="flex: 1;">Customer</button>
+                    <button type="button" onclick="setRole('delivery')" class="role-btn" id="btn-delivery" style="flex: 1;">Staff</button>
+                </div>
+            </div>
+
+            <div id="admin-inputs" class="animate-fade-in">
+                <div class="form-group" style="margin-bottom: 0.75rem;">
+                    <input type="text" name="admin_username" placeholder="Username" style="height: 2.75rem; font-size: 0.9rem;">
+                </div>
+                <div class="form-group" style="position: relative;">
+                    <input type="password" name="admin_password" id="admin_password" placeholder="Password" style="height: 2.75rem; padding-right: 45px; font-size: 0.9rem;">
+                    <i class="fas fa-eye" onclick="togglePassword('admin_password', this)" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-muted); font-size: 0.85rem;"></i>
+                </div>
+            </div>
+
+            <div id="customer-inputs" style="display: none;" class="animate-fade-in">
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <input type="text" name="customer_id" placeholder="ID or Cell Number" style="height: 3rem;">
+                </div>
+                <div class="form-group" style="position: relative;">
+                    <input type="password" name="customer_password" id="customer_password" placeholder="Secure PIN" style="height: 3rem; padding-right: 45px;">
+                    <i class="fas fa-eye" onclick="togglePassword('customer_password', this)" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-muted); font-size: 0.9rem;"></i>
+                </div>
+            </div>
+
+            <div id="delivery-inputs" style="display: none;" class="animate-fade-in">
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <input type="text" name="delivery_username" placeholder="Staff ID" style="height: 3rem;">
+                </div>
+                <div class="form-group" style="position: relative;">
+                    <input type="password" name="delivery_password" id="delivery_password" placeholder="Password" style="height: 3rem; padding-right: 45px;">
+                    <i class="fas fa-eye" onclick="togglePassword('delivery_password', this)" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-muted); font-size: 0.9rem;"></i>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin: 1.5rem 0;">
+                <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer;">
+                    <input type="checkbox" name="remember_me" style="width: 1rem; height: 1rem; accent-color: var(--primary);">
+                    <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted);">Remember</span>
+                </label>
+                <a href="javascript:void(0)" onclick="showForgot()" style="color: var(--primary); font-size: 0.85rem; font-weight: 600; text-decoration: none;">Forgot?</a>
+            </div>
+            
+            <button type="submit" class="btn btn-primary btn-block" style="height: 3.25rem; font-size: 1rem; border-radius: 0.85rem; font-weight: 700;">
+                SIGN IN <i class="fas fa-sign-in-alt" style="margin-left: 0.5rem;"></i>
+            </button>
+
+            {% with messages = get_flashed_messages() %}{% if messages %}
+            <a href="/" class="btn btn-block" style="margin-top: 0.75rem; height: 2.75rem; font-size: 0.9rem; border-radius: 0.85rem; font-weight: 600; background: var(--surface-solid); color: var(--text-muted); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; gap: 0.5rem; text-decoration: none;">
+                <i class="fas fa-arrow-left"></i> Go Back to Login
+            </a>
+            {% endif %}{% endwith %}
+        </form>
+    </div>
+</div>
+
+<!-- Premium Recovery Modal -->
+<div id="forgotModal" style="display: none; position: fixed; inset: 0; background: rgba(2, 6, 23, 0.8); backdrop-filter: blur(12px); justify-content: center; align-items: center; z-index: 5000;">
+    <div class="card animate-fade-in" style="width: 90%; max-width: 440px; padding: 3.5rem; text-align: center; border-radius: 2.25rem; border: 1px solid rgba(255,255,255,0.1);">
+        <h2 style="margin-bottom: 1rem; color: var(--text-main);">Reset Password</h2>
+        <p style="color: var(--text-muted); font-size: 0.95rem; line-height: 1.6; margin-bottom: 2rem;">Select your role and provide details to raise a ticket.</p>
+        
+        <div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; background: var(--surface-solid); padding: 0.35rem; border-radius: 1rem;">
+            <button type="button" onclick="setForgotRole('customer')" id="forgot-customer" class="role-btn active" style="flex: 1; font-size: 0.65rem;">Customer</button>
+            <button type="button" onclick="setForgotRole('staff')" id="forgot-staff" class="role-btn" style="flex: 1; font-size: 0.65rem;">Staff</button>
+        </div>
+
+        <form action="/forgot_password" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="user_type" id="forgotUserType" value="customer">
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <input type="text" name="name" placeholder="Full Name" required style="height: 3.5rem;">
+            </div>
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <input type="text" name="user_id" id="forgotIdPlaceholder" placeholder="Customer ID" required style="height: 3.5rem;">
+            </div>
+            <div class="form-group" style="margin-bottom: 2rem;">
+                <input type="text" name="contact_number" placeholder="Phone Number" required style="height: 3.5rem;">
+            </div>
+            <div style="display: flex; gap: 1rem;">
+                <button type="button" class="btn btn-secondary" style="flex: 1; height: 3.5rem; border-radius: 1rem;" onclick="closeForgot()">Cancel</button>
+                <button type="submit" class="btn btn-primary" style="flex: 1; height: 3.5rem; border-radius: 1rem;">Raise Ticket</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function setRole(role) {
+        document.getElementById("roleInput").value = role;
+        document.querySelectorAll(".role-btn").forEach(btn => btn.classList.remove("active"));
+        document.getElementById("btn-" + role).classList.add("active");
+        toggleInputs();
+    }
+
+    function toggleInputs() {
+        const r = document.getElementById("roleInput").value;
+        document.getElementById("admin-inputs").style.display = r === "admin" ? "block" : "none";
+        document.getElementById("customer-inputs").style.display = r === "customer" ? "block" : "none";
+        document.getElementById("delivery-inputs").style.display = r === "delivery" ? "block" : "none";
+    }
+
+    function togglePassword(id, icon) {
+        const i = document.getElementById(id);
+        i.type = i.type === 'password' ? 'text' : 'password';
+        icon.className = `fas fa-eye${i.type === 'password' ? '' : '-slash'}`;
+    }
+
+    function showForgot() { document.getElementById('forgotModal').style.display = 'flex'; }
+    function closeForgot() { document.getElementById('forgotModal').style.display = 'none'; }
+    function setForgotRole(role) {
+        document.getElementById('forgotUserType').value = role;
+        document.getElementById('forgot-customer').classList.toggle('active', role === 'customer');
+        document.getElementById('forgot-staff').classList.toggle('active', role === 'staff');
+        document.getElementById('forgotIdPlaceholder').placeholder = role === 'customer' ? 'Customer ID' : 'Staff ID';
+    }
+    
+    window.onload = toggleInputs;
+</script>
+
+<style>
+    .auth-card:hover { transform: none !important; }
+    .role-btn {
+        padding: 0.5rem;
+        border-radius: 0.75rem;
+        border: 1px solid var(--border);
+        background: var(--background);
+        color: var(--text-main);
+        cursor: pointer;
+        font-weight: 700;
+        transition: 0.3s;
+        font-size: 0.7rem;
+        outline: none;
+    }
+    .role-btn:hover {
+        background: var(--surface-solid);
+        border-color: var(--primary);
+    }
+    .role-btn.active {
+        background: var(--primary) !important;
+        color: white !important;
+        border-color: var(--primary) !important;
+        box-shadow: 0 4px 12px rgba(var(--primary-h), var(--primary-s), var(--primary-l), 0.3);
+    }
+    @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        15%       { transform: translateX(-5px); }
+        30%       { transform: translateX(5px); }
+        45%       { transform: translateX(-4px); }
+        60%       { transform: translateX(4px); }
+        75%       { transform: translateX(-2px); }
+        90%       { transform: translateX(2px); }
+    }
+    .animate-shake { animation: shake 0.55s ease; }
+</style>
+{% endblock %}

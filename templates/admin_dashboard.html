@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard | Hari Sakthi{% endblock %}
+
+{% block content %}
+<div class="animate-fade-in" style="margin-bottom: 2rem; text-align: left;">
+    <h1 style="font-size: 2.25rem; margin-bottom: 0.25rem;" class="text-gradient">Shop Dashboard</h1>
+    <p style="font-size: 1rem; color: var(--text-muted); font-weight: 500;">Welcome back! Hari Sakthi Dairy & Snacks admin portal.</p>
+</div>
+
+<div class="grid-2 animate-fade-in" style="animation-delay: 0.1s;">
+    <!-- Snacks Module Card -->
+    <div class="card module-card snacks-card">
+        <div class="dashboard-icon" style="background: var(--status-warning-bg); color: var(--status-warning-text);">
+            <i class="fas fa-cookie-bite"></i>
+        </div>
+        <h2 style="font-size: 1.5rem; color: var(--text-main); margin-bottom: 0.25rem;">Snacks Shop</h2>
+        <p style="color: var(--text-muted); margin-bottom: 1.5rem; font-size: 0.9rem; line-height: 1.5;">Manage snacks inventory, billing, and items.</p>
+        
+        <div class="grid-2" style="gap: 0.75rem;">
+            <a href="/snacks" class="btn btn-secondary nav-item">
+                <i class="fas fa-utensils"></i> Menu
+            </a>
+            <a href="/snacks/inventory" class="btn btn-secondary nav-item">
+                <i class="fas fa-boxes"></i> Inventory
+            </a>
+            <a href="/snacks/billing" class="btn btn-secondary nav-item">
+                <i class="fas fa-file-invoice-dollar"></i> Billing
+            </a>
+            <a href="/snacks/accounts" class="btn btn-secondary nav-item">
+                <i class="fas fa-calculator"></i> Accounts
+            </a>
+        </div>
+    </div>
+
+    <!-- Dairy Module Card -->
+    <div class="card module-card dairy-card">
+        <div class="dashboard-icon" style="background: var(--status-info-bg); color: var(--status-info-text);">
+            <i class="fas fa-droplet"></i>
+        </div>
+        <h2 style="font-size: 1.5rem; color: var(--text-main); margin-bottom: 0.25rem;">Milk Business</h2>
+        <p style="color: var(--text-muted); margin-bottom: 1.5rem; font-size: 0.9rem; line-height: 1.5;">Manage milk delivery, attendance, and monthly bills.</p>
+        
+        <div class="grid-2" style="gap: 0.75rem;">
+            <a href="/dairy/attendance" class="btn btn-secondary nav-item">
+                <i class="fas fa-calendar-check"></i> Attendance
+            </a>
+            <a href="/dairy/billing" class="btn btn-secondary nav-item">
+                <i class="fas fa-file-invoice"></i> Billing
+            </a>
+            <a href="/dairy/accounts" class="btn btn-secondary nav-item">
+                <i class="fas fa-chart-line"></i> Analytics
+            </a>
+            <a href="/dairy" class="btn btn-secondary nav-item">
+                <i class="fas fa-cog"></i> Configure
+            </a>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Premium Hover Styles */
+    .module-card {
+        padding: 3rem 2.5rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .module-card::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 15rem;
+        height: 15rem;
+        background: radial-gradient(circle at top right, var(--primary), transparent);
+        opacity: 0.05;
+        z-index: -1;
+    }
+
+    .snacks-card::after { background: radial-gradient(circle at top right, #f59e0b, transparent); }
+
+    .nav-item {
+        padding: 0.875rem 1.25rem !important;
+        font-size: 0.95rem !important;
+        border-radius: 1rem !important;
+        justify-content: flex-start !important;
+    }
+
+    .nav-item i {
+        width: 1.5rem;
+        text-align: center;
+    }
+
+    .btn-secondary.nav-item:hover {
+        border-color: var(--primary);
+        background: var(--primary-light);
+        color: var(--primary-dark);
+        transform: translateX(4px);
+    }
+</style>
+
+{% endblock %}

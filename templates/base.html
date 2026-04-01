@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Hari Sakthi Dairy & Snacks{% endblock %}</title>
+    <!-- Modern Typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Main Style -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    
+    {% block extra_css %}{% endblock %}
+    
+    <style>
+        /* Preloader Styles */
+        #page-loader {
+            position: fixed;
+            inset: 0;
+            background: #020617;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .loader-content {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .loader-logo {
+            width: 120px;
+            filter: drop-shadow(0 0 20px rgba(99, 102, 241, 0.4));
+            margin-bottom: 2rem;
+            animation: loaderPulse 2s infinite ease-in-out;
+        }
+        
+        .loader-bar {
+            width: 200px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .loader-progress {
+            position: absolute;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, #6366f1, transparent);
+            animation: loaderSlide 1.5s infinite linear;
+        }
+        
+        @keyframes loaderPulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+        }
+        
+        @keyframes loaderSlide {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+        
+        #page-loader.fade-out {
+            opacity: 0;
+            visibility: hidden;
+            transform: scale(1.1);
+        }
+    </style>
+</head>
+
+<body class="{{ 'theme-snacks' if 'snacks' in request.path else 'theme-dairy' if 'dairy' in request.path else '' }}">
+    <!-- Premium Preloader -->
+    <div id="page-loader">
+        <div class="loader-content">
+            <img src="{{ url_for('static', filename='logo.png') }}" alt="Hari Sakthi" class="loader-logo">
+            <div class="loader-bar">
+                <div class="loader-progress"></div>
+            </div>
+            <p style="margin-top: 1.5rem; color: #94a3b8; font-weight: 600; letter-spacing: 0.05em; font-family: 'Plus Jakarta Sans';">LOADING SHOP SYSTEM...</p>
+        </div>
+    </div>
+
+    <!-- Glass Navbar -->
+    <nav class="navbar">
+        <a href="/" class="brand">
+            <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" class="navbar-logo">
+            <span class="text-gradient">HARI SAKTHI</span>
+        </a>
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <button id="theme-toggle" class="btn btn-secondary" style="padding: 0.5rem; width: 2.5rem; height: 2.5rem; border-radius: 0.75rem; border: 1px solid var(--border);">
+                <i class="fas fa-moon"></i>
+            </button>
+            {% if not hide_menu %}
+            <button id="hamburger-menu" class="btn btn-primary" style="padding: 0.5rem; width: 2.5rem; height: 2.5rem; border-radius: 0.75rem;">
+                <i class="fas fa-bars"></i>
+            </button>
+            {% endif %}
+        </div>
+    </nav>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <!-- Premium Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3rem;">
+            <h2 class="text-gradient">Navigation</h2>
+            <button class="btn btn-secondary" id="sidebar-close" style="padding: 0.5rem; border-radius: 0.75rem;">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <div class="sidebar-content">
+            {% if session.get('role') == 'admin' %}
+            <div class="sidebar-section">
+                <a href="/admin" class="sidebar-link"><i class="fas fa-house"></i> Dashboard</a>
+                <a href="/admin/account" class="sidebar-link"><i class="fas fa-gear"></i> Settings</a>
+            </div>
+
+            <div class="sidebar-section sidebar-section-snacks">
+                <h3>Snacks Module</h3>
+                <a href="/snacks" class="sidebar-link"><i class="fas fa-utensils"></i> Menu</a>
+                <a href="/snacks/inventory" class="sidebar-link"><i class="fas fa-boxes"></i> Inventory</a>
+                <a href="/snacks/billing" class="sidebar-link"><i class="fas fa-file-invoice-dollar"></i> Billing</a>
+                <a href="/snacks/accounts" class="sidebar-link"><i class="fas fa-calculator"></i> Accounts</a>
+            </div>
+
+            <div class="sidebar-section sidebar-section-dairy">
+                <h3>Dairy Module</h3>
+                <a href="/dairy" class="sidebar-link"><i class="fas fa-bottle-water"></i> Home</a>
+                <a href="/dairy/attendance" class="sidebar-link"><i class="fas fa-calendar-check"></i> Attendance</a>
+                <a href="/dairy/billing" class="sidebar-link"><i class="fas fa-file-invoice"></i> Bills</a>
+                <a href="/dairy/accounts" class="sidebar-link"><i class="fas fa-chart-line"></i> Accounts</a>
+                <a href="/dairy/staff" class="sidebar-link"><i class="fas fa-user-group"></i> Staff List</a>
+            </div>
+            {% endif %}
+            
+            <div class="sidebar-section" style="margin-top: 2rem; border-top: 1px solid var(--border); padding-top: 1.5rem;">
+                <a href="/logout" class="sidebar-link" style="color: var(--danger); font-weight: 700;">
+                    <i class="fas fa-power-off"></i> Logout
+                </a>
+                <a href="/logout" class="sidebar-link" style="color: var(--text-muted); margin-top: 0.5rem;">
+                    <i class="fas fa-user-gear"></i> Sign in to other account
+                </a>
+            </div>
+        </div>
+    </aside>
+
+    <main class="container animate-fade-in">
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        <div class="card animate-fade-in" style="background: hsla(235, 85%, 65%, 0.1); border: 1px solid var(--primary); color: var(--text-main); margin-bottom: 2.5rem; padding: 1.5rem;">
+            {% for message in messages %}
+            <p style="display: flex; align-items: center; gap: 0.75rem; font-weight: 600;">
+                <i class="fas fa-sparkles text-gradient"></i> {{ message }}
+            </p>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer style="margin-top: 4rem; padding: 3rem 1rem; text-align: center; opacity: 0.6;">
+        <p style="font-weight: 600; font-size: 0.9rem;">&copy; 2024 HARI SAKTHI DAIRY &amp; SNACKS</p>
+    </footer>
+
+    <!-- Global Scripts -->
+    <script>
+        const hideLoader = () => {
+            const loader = document.getElementById('page-loader');
+            if (loader) {
+                loader.classList.add('fade-out');
+                setTimeout(() => loader.style.display = 'none', 600);
+            }
+        };
+        window.addEventListener('load', hideLoader);
+        setTimeout(hideLoader, 3000);
+
+        // Sidebar Transition
+        document.addEventListener('DOMContentLoaded', () => {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            const toggle = () => {
+                sidebar.classList.toggle('active');
+                overlay.classList.toggle('active');
+                document.body.classList.toggle('sidebar-open');
+            };
+            document.getElementById('hamburger-menu')?.addEventListener('click', toggle);
+            document.getElementById('sidebar-close')?.addEventListener('click', toggle);
+            overlay?.addEventListener('click', toggle);
+        });
+
+        // Theme Management
+        document.addEventListener('DOMContentLoaded', () => {
+            const themeToggle = document.getElementById('theme-toggle');
+            const icon = themeToggle.querySelector('i');
+            const apply = (t) => {
+                if (t === 'dark') {
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                    icon.className = 'fas fa-sun';
+                } else {
+                    document.documentElement.removeAttribute('data-theme');
+                    icon.className = 'fas fa-moon';
+                }
+            };
+            const current = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            apply(current);
+            themeToggle.addEventListener('click', () => {
+                const nw = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+                apply(nw);
+                localStorage.setItem('theme', nw);
+            });
+        });
+
+        // Global Arrow Key Navigation
+        document.addEventListener('keydown', (e) => {
+            const active = document.activeElement;
+            const isDashboard = window.location.pathname === '/admin';
+            
+            const focusable = Array.from(document.querySelectorAll('a, button, .card[tabindex], input, select, textarea'))
+                .filter(el => {
+                    const isVisible = el.offsetWidth > 0 && el.offsetHeight > 0 && !el.disabled;
+                    if (!isVisible) return false;
+                    
+                    // On dashboard, prioritize .nav-item buttons for arrow navigation
+                    if (isDashboard && !el.classList.contains('nav-item') && !el.closest('#sidebar')) {
+                        return false;
+                    }
+                    
+                    // Exclude sidebar links if sidebar is closed
+                    const sidebar = el.closest('#sidebar');
+                    if (sidebar && !sidebar.classList.contains('active')) return false;
+                    return true;
+                });
+            
+            if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(e.key)) return;
+            
+            // If typing in an input, don't hijack keys
+            if (['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName)) return;
+
+            if (e.key === 'Enter') {
+                if (active.hasAttribute('href') || active.tagName === 'BUTTON' || active.classList.contains('card')) active.click();
+                return;
+            }
+
+            e.preventDefault();
+            const index = focusable.indexOf(active);
+            let nextIndex = 0;
+
+            if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+                nextIndex = (index + 1) % focusable.length;
+            } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+                nextIndex = (index - 1 + focusable.length) % focusable.length;
+            }
+
+            const element = focusable[nextIndex];
+            element.focus();
+            element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            
+            // Visual feedback for cards
+            document.querySelectorAll('.card').forEach(c => c.classList.remove('keyboard-focused'));
+            if (element.classList.contains('card')) {
+                element.classList.add('keyboard-focused');
+            } else {
+                const parentCard = element.closest('.card');
+                if (parentCard) parentCard.classList.add('keyboard-focused');
+            }
+        });
+
+        // Optional: specific tabindex for non-link cards if needed
+        document.addEventListener('DOMContentLoaded', () => {
+            // Keep cards clean unless they are the primary action
+        });
+    </script>
+    
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    {% block scripts %}{% endblock %}
+</body>
+
+</html>

@@ -1,0 +1,659 @@
+{% extends "base.html" %}
+{% block title %}Billing System{% endblock %}
+{% block content %}
+<style>
+    .billing-container { display: grid; grid-template-columns: 1fr 400px; gap: 2rem; align-items: start; max-width: 1400px; margin: 0 auto; }
+    
+    .search-section { 
+        background: var(--glass-bg); 
+        backdrop-filter: blur(12px);
+        padding: 2rem; 
+        border-radius: 1.5rem; 
+        border: 1px solid var(--border); 
+        box-shadow: var(--shadow); 
+        transition: transform 0.3s ease;
+    }
+    
+    .cart-section { 
+        background: var(--card-bg); 
+        padding: 2rem; 
+        border-radius: 1.5rem; 
+        border: 1px solid var(--border); 
+        box-shadow: var(--shadow); 
+        position: sticky; 
+        top: 2rem; 
+    }
+    
+    .product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 12px; margin-top: 1rem; }
+    .product-btn { 
+        background: var(--input-bg); 
+        border: 1px solid var(--border); 
+        border-radius: 0.75rem; 
+        padding: 0.8rem; 
+        text-align: center; 
+        cursor: pointer; 
+        transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        display: flex; flex-direction: column; align-items: center; gap: 5px;
+        box-shadow: var(--shadow-sm);
+        color: var(--text-main);
+    }
+    .product-btn:hover { 
+        transform: translateY(-3px); 
+        border-color: var(--primary); 
+        box-shadow: var(--shadow); 
+    }
+    
+    .autocomplete-items { 
+        position: absolute; 
+        border: 1px solid var(--border); 
+        background: var(--card-bg); 
+        z-index: 1000; 
+        top: 100%; left: 0; right: 0; 
+        border-radius: 1rem; 
+        box-shadow: var(--shadow-lg); 
+        max-height: 300px; overflow-y: auto; 
+        margin-top: 8px;
+        animation: slideDown 0.2s ease-out;
+    }
+    @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    
+    .autocomplete-item { padding: 12px 1.5rem; cursor: pointer; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; color: var(--text-main); }
+    .autocomplete-item:hover { background: var(--primary-light); color: var(--primary-dark); }
+    
+    .qty-control { display: flex; align-items: center; gap: 0.5rem; background: var(--background); padding: 4px; border-radius: 1rem; }
+    .qty-btn { width: 32px; height: 32px; border-radius: 0.75rem; border: none; background: var(--card-bg); color: var(--text-main); cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: bold; transition: 0.2s; box-shadow: var(--shadow-sm); }
+    .qty-btn:hover { background: var(--primary); color: white; }
+    
+    .mode-toggle { display: flex; background: var(--background); padding: 6px; border-radius: 2rem; margin-bottom: 2rem; gap: 5px; border: 1px solid var(--border); }
+    .mode-btn { flex: 1; padding: 10px; border-radius: 1.5rem; border: none; cursor: pointer; font-weight: 600; transition: 0.3s; background: transparent; color: var(--text-muted); }
+    .mode-btn.active { background: var(--card-bg); color: var(--primary); box-shadow: var(--shadow-sm); }
+    
+    #reader { 
+        width: 100%; 
+        border-radius: 1.5rem; 
+        overflow: hidden; 
+        margin-top: 1.5rem; 
+        border: 2px solid var(--primary); 
+        background: #000;
+    }
+    #reader video { width: 100% !important; object-fit: cover !important; }
+
+    @media (max-width: 1100px) {
+        .billing-container { grid-template-columns: 1fr; }
+        .cart-section { position: relative; top: 0; }
+    }
+</style>
+
+<div style="margin-bottom: 2rem;">
+    <a href="/snacks" class="btn btn-secondary" style="text-decoration: none; display: inline-flex; align-items: center; gap: 8px; font-weight: 700;">
+        <i class="fas fa-arrow-left"></i> Back to Snacks Menu
+    </a>
+</div>
+
+<div style="text-align: center; margin-bottom: 3rem;">
+    <h1 style="font-size: 3rem; font-weight: 800; background: linear-gradient(135deg, var(--primary), var(--accent)); -webkit-background-clip: text; background-clip: text; color: transparent; margin-bottom: 0.5rem; letter-spacing: -1px;">Point of Sale</h1>
+</div>
+
+<div id="billing-root"></div>
+
+{% block scripts %}
+<script src="https://unpkg.com/html5-qrcode"></script>
+<script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    const ProductSearch = ({ onAddProduct, scannerReady, setScannerReady, billMode, toggleScanner }) => {
+        const [searchTerm, setSearchTerm] = useState('');
+        const [results, setResults] = useState([]);
+        const [showAuto, setShowAuto] = useState(false);
+        const searchInputRef = useRef(null);
+
+        // Auto-focus on mount
+        useEffect(() => {
+            if (searchInputRef.current) searchInputRef.current.focus();
+        }, []);
+
+        // Global focus listener for barcode scanning
+        useEffect(() => {
+            const handleGlobalKeyDown = (e) => {
+                // If the user starts typing digits rapidly, or uses a specific prefix, focus the search
+                // Note: Standard scanner behavior is to act as a keyboard.
+                // We ensure that if no other input is focused, we redirect to the search input.
+                const active = document.activeElement;
+                const isInputActive = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.contentEditable === 'true');
+                
+                if (!isInputActive && /^\d$/.test(e.key)) {
+                    if (searchInputRef.current) {
+                        searchInputRef.current.focus();
+                    }
+                }
+            };
+            window.addEventListener('keydown', handleGlobalKeyDown);
+            return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+        }, []);
+
+        useEffect(() => {
+            if (searchTerm.length < 1) {
+                setResults([]);
+                setShowAuto(false);
+                return;
+            }
+
+            // If it looks like a barcode (all digits or SNACK:), we might want to skip long debounce 
+            // but for now, we'll keep it simple and just ensure Enter/Tab works immediately.
+            const isBarcode = /^\d+$/.test(searchTerm) || searchTerm.startsWith("SNACK:");
+            const delay = isBarcode ? 100 : 300; 
+
+            const delayDebounceFn = setTimeout(() => {
+                fetch(`/api/snacks/product_lookup?q=${encodeURIComponent(searchTerm)}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (Array.isArray(data)) {
+                            setResults(data);
+                            setShowAuto(data.length > 0);
+                        } else if (data.found) {
+                            onAddProduct(data);
+                            setSearchTerm('');
+                            setShowAuto(false);
+                        }
+                    });
+            }, delay);
+
+            return () => clearTimeout(delayDebounceFn);
+        }, [searchTerm]);
+
+        const processSearch = (val) => {
+            const trimmed = val.trim();
+            if (!trimmed) return;
+
+            if (/^\d+$/.test(trimmed) || trimmed.startsWith("SNACK:")) {
+                const id = trimmed.startsWith("SNACK:") ? parseInt(trimmed.split(":")[1]) : parseInt(trimmed);
+                if (!isNaN(id)) {
+                    fetch(`/api/snacks/product_lookup?q=${id}`)
+                        .then(r => r.json())
+                        .then(data => {
+                            if(data.found) {
+                                onAddProduct(data);
+                                setSearchTerm('');
+                                setShowAuto(false);
+                                // Refocus after adding
+                                if (searchInputRef.current) searchInputRef.current.focus();
+                            }
+                        });
+                }
+            }
+        };
+
+        const handleKeyDown = (e) => {
+            if (e.key === 'Enter' || e.key === 'Tab') {
+                // If we have results in autocomplete and Enter was pressed, we might want to select the first one?
+                // But for scanners, they usually type the whole thing and press Enter.
+                if (searchTerm) {
+                    processSearch(searchTerm);
+                    e.preventDefault();
+                }
+            }
+        };
+
+        return (
+            <div style={ { position: 'relative' } }>
+                <label style={ { fontWeight: 700, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', color: 'var(--text-main)' } }>
+                    <span>Find Product</span>
+                    <span 
+                        className="badge" 
+                        onClick={() => searchInputRef.current && searchInputRef.current.focus()}
+                        style={ { cursor: 'pointer', background: 'var(--status-info-bg)', color: 'var(--status-info-text)', padding: '6px 12px', borderRadius: '0.75rem', fontSize: '0.75rem', border: '1px solid var(--border)' } }
+                    >
+                        <i className="fas fa-keyboard mr-1"></i> Scanner Mode (Auto-Focus On)
+                    </span>
+                </label>
+                <div style={ { display: 'flex', gap: 12, alignItems: 'center' } }>
+                    <div style={ { position: 'relative', flex: 1 } }>
+                        <input 
+                            type="text" 
+                            id="barcode-input"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            placeholder="Scan barcode or type name..." 
+                            className="form-control" 
+                            autoComplete="off" 
+                            autoFocus
+                            style={ { paddingLeft: '3rem', height: 56, borderRadius: '1rem', border: '2px solid var(--border)', background: 'var(--input-bg)', color: 'var(--text-main)', fontSize: '1rem', transition: '0.3s' } }
+                            ref={searchInputRef}
+                        />
+                        <i className="fas fa-barcode" style={ { position: 'absolute', left: '1.25rem', top: '1.25rem', color: 'var(--text-muted)', fontSize: '1.2rem' } }></i>
+                        
+                        {showAuto && (
+                            <div className="autocomplete-items">
+                                {results.map((prod, idx) => (
+                                    <div key={idx} className="autocomplete-item" onClick={() => {
+                                        onAddProduct(prod);
+                                        setSearchTerm('');
+                                        setShowAuto(false);
+                                        if (searchInputRef.current) searchInputRef.current.focus();
+                                    }}>
+                                        <strong>{prod.name}</strong> 
+                                        <span style={ { float: 'right', color: 'var(--success)' } }>
+                                            ₹{(billMode === 'retail' ? prod.retail_price : prod.wholesale_price).toFixed(2)}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    <button className="btn btn-primary" onClick={toggleScanner} style={ { height: 56, borderRadius: '1rem', padding: '0 1.5rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 } }>
+                        <i className="fas fa-camera"></i> <span>Mobile Scan</span>
+                    </button>
+                </div>
+            </div>
+        );
+    };
+
+    const ScannerModule = ({ onScan, onClose, scannerReady, setScannerStatus }) => {
+        const [cameras, setCameras] = useState([]);
+        const [selectedCamera, setSelectedCamera] = useState('');
+        const html5QrCodeRef = useRef(null);
+        const [error, setError] = useState(null);
+
+        const playBeep = () => {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.15);
+                setTimeout(() => audioCtx.close(), 200);
+            } catch (e) {}
+        };
+
+        const startScanning = useCallback(async (cameraId) => {
+            if (!html5QrCodeRef.current) return;
+            try {
+                // Determine formats to support safely
+                const formats = [
+                    window.Html5QrcodeSupportedFormats ? Html5QrcodeSupportedFormats.QR_CODE : 0,
+                    window.Html5QrcodeSupportedFormats ? Html5QrcodeSupportedFormats.CODE_128 : 1,
+                    window.Html5QrcodeSupportedFormats ? Html5QrcodeSupportedFormats.EAN_13 : 2
+                ].filter(f => f !== undefined);
+
+                const config = { 
+                    fps: 25, 
+                    qrbox: { width: 280, height: 200 },
+                    aspectRatio: 1.0,
+                    formatsToSupport: formats
+                };
+
+                await html5QrCodeRef.current.start(cameraId, config, (text) => {
+                    if (!scannerReady) return;
+                    onScan(text);
+                    setScannerStatus('success');
+                    playBeep();
+                    if(navigator.vibrate) navigator.vibrate(150);
+                    setTimeout(() => setScannerStatus('ready'), 1500); // Increased cooldown
+                });
+                setScannerStatus('ready');
+            } catch (e) {
+                console.error("Scanner Start Error:", e);
+                setError("Could not start camera. Please ensure camera access is granted.");
+            }
+        }, [scannerReady, onScan, setScannerStatus]);
+
+        useEffect(() => {
+            let ignore = false;
+            
+            const init = async () => {
+                try {
+                    html5QrCodeRef.current = new Html5Qrcode("reader");
+                    const devices = await Html5Qrcode.getCameras();
+                    if (ignore) return;
+
+                    if (devices && devices.length > 0) {
+                        const realDevices = devices.filter(d => 
+                            !d.label.toLowerCase().includes('droidcam') && 
+                            !d.label.toLowerCase().includes('virtual')
+                        );
+                        const activeDevices = realDevices.length > 0 ? realDevices : devices;
+                        setCameras(activeDevices);
+
+                        const savedId = localStorage.getItem('preferred_cam');
+                        const backCam = activeDevices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear'));
+                        
+                        let camId = activeDevices[0].id;
+                        if(savedId && activeDevices.some(d => d.id === savedId)) camId = savedId;
+                        else if(backCam) camId = backCam.id;
+
+                        setSelectedCamera(camId);
+                        startScanning(camId);
+                    } else {
+                        setError("No cameras found on this device.");
+                    }
+                } catch (err) {
+                    if (!ignore) setError(err.message || "Camera permission denied.");
+                }
+            };
+
+            init();
+
+            return () => {
+                ignore = true;
+                if (html5QrCodeRef.current) {
+                    html5QrCodeRef.current.stop().catch(() => {});
+                }
+            };
+        }, []);
+
+        const handleCameraChange = async (e) => {
+            const id = e.target.value;
+            setSelectedCamera(id);
+            localStorage.setItem('preferred_cam', id);
+            if (html5QrCodeRef.current && html5QrCodeRef.current.getState() === 2) {
+                await html5QrCodeRef.current.stop();
+            }
+            startScanning(id);
+        };
+
+        const flipCamera = async () => {
+            if (cameras.length < 2) return;
+            const currentIndex = cameras.findIndex(c => c.id === selectedCamera);
+            const nextIndex = (currentIndex + 1) % cameras.length;
+            const nextCam = cameras[nextIndex];
+            setSelectedCamera(nextCam.id);
+            localStorage.setItem('preferred_cam', nextCam.id);
+            if (html5QrCodeRef.current && html5QrCodeRef.current.getState() === 2) {
+                await html5QrCodeRef.current.stop();
+            }
+            startScanning(nextCam.id);
+        };
+
+        return (
+            <div id="scanner-container" style={ { marginTop: '1.5rem' } }>
+                <div id="reader"></div>
+                {error && (
+                    <div style={ { padding: 40, textAlign: 'center', background: 'var(--status-danger-bg)', color: 'var(--status-danger-text)', border: '2px dashed var(--danger)', borderRadius: '1.5rem' } }>
+                        <i className="fas fa-camera-slash" style={ { fontSize: '2.5rem', marginBottom: 15, opacity: 0.5 } }></i>
+                        <h6 style={ { fontWeight: 800, marginBottom: 8 } }>Camera link failed</h6>
+                        <p style={ { fontSize: '0.85rem', opacity: 0.8 } }>{error}</p>
+                        <p style={ { fontSize: '0.8rem', opacity: 0.9, marginTop: 15, fontWeight: 700, color: 'var(--text-main)' } }>
+                            <i className="fas fa-info-circle"></i> If you accidentally blocked the camera, click the <strong>Lock</strong> icon (or Site Settings) in your browser's URL bar, change "Camera" to <strong>Allow</strong>, and then reload the page.
+                        </p>
+                    </div>
+                )}
+                
+                {!error && cameras.length > 0 && (
+                    <div id="camera-controls" style={ { marginTop: '1rem', display: 'flex', gap: 10 } }>
+                        <select 
+                            value={selectedCamera} 
+                            onChange={handleCameraChange}
+                            className="form-control" 
+                            style={ { flex: 1, borderRadius: '0.75rem', height: 45, background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)' } }
+                        >
+                            {cameras.map(c => <option key={c.id} value={c.id}>{c.label || `Camera ${c.id.substring(0,4)}`}</option>)}
+                        </select>
+                        <button className="btn btn-warning" onClick={flipCamera} title="Switch Camera" style={ { borderRadius: '0.75rem', padding: '0 1rem' } }><i className="fas fa-sync-alt"></i></button>
+                        <button className="btn btn-danger" onClick={onClose} style={ { borderRadius: '0.75rem', padding: '0 1rem' } }><i className="fas fa-times"></i></button>
+                    </div>
+                )}
+                {error && <button className="btn btn-secondary btn-block mt-2" onClick={onClose}>Close Scanner</button>}
+            </div>
+        );
+    };
+
+    const BillingApp = () => {
+        const [cart, setCart] = useState([]);
+        const [billMode, setBillMode] = useState('retail');
+        const [discount, setDiscount] = useState(0);
+        const [customerName, setCustomerName] = useState('');
+        const [paymentMode, setPaymentMode] = useState('Cash');
+        const [scannerActive, setScannerActive] = useState(false);
+        const [scannerReady, setScannerReady] = useState(true);
+        const [topItems, setTopItems] = useState([]);
+        const [loading, setLoading] = useState(false);
+
+        useEffect(() => {
+            const raw = '{{ items[:12]|tojson|safe }}';
+            try {
+                const initialItems = JSON.parse(raw);
+                setTopItems(initialItems);
+            } catch (e) {
+                console.error("Failed to parse top items", e);
+            }
+        }, []);
+
+        const addProduct = (prod) => {
+            setCart(prev => {
+                const existing = prev.find(i => i.id === prod.id);
+                if (existing) {
+                    return prev.map(i => i.id === prod.id ? { ...i, qty: i.qty + 1 } : i);
+                } else {
+                    const price = (billMode === 'retail') ? prod.retail_price : prod.wholesale_price;
+                    return [...prev, { id: prod.id, name: prod.name, qty: 1, unit_price: price }];
+                }
+            });
+        };
+
+        const addProductById = (id) => {
+            fetch(`/api/snacks/product_lookup?q=${id}`)
+                .then(r => r.json())
+                .then(data => { if(data.found) addProduct(data); });
+        };
+
+        const updateQty = (id, delta) => {
+            setCart(prev => prev.map(i => i.id === id ? { ...i, qty: i.qty + delta } : i).filter(i => i.qty > 0));
+        };
+
+        const removeItem = (id) => {
+            setCart(prev => prev.filter(i => i.id !== id));
+        };
+
+        const subtotal = cart.reduce((acc, item) => acc + (item.unit_price * item.qty), 0);
+        const grandTotal = Math.max(0, subtotal - discount);
+
+        const handleCheckout = () => {
+            if (cart.length === 0) return alert('Cart is empty!');
+            setLoading(true);
+            const data = {
+                mode: billMode, cart: cart,
+                customer_name: customerName || 'Walk-in',
+                payment_mode: paymentMode,
+                discount: discount
+            };
+            const csrfToken = "{{ csrf_token() }}";
+            fetch('/snacks/billing', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify(data)
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) window.location.href = `/snacks/bill/${res.bill_id}`;
+                else {
+                    alert('Checkout failed: ' + res.error);
+                    setLoading(false);
+                }
+            });
+        };
+
+        useEffect(() => {
+            const refreshPrices = async () => {
+                const newCart = await Promise.all(cart.map(async item => {
+                    const res = await fetch(`/api/snacks/product_lookup?q=${item.id}`);
+                    const data = await res.json();
+                    if (data.found) {
+                        return { ...item, unit_price: (billMode === 'retail') ? data.retail_price : data.wholesale_price };
+                    }
+                    return item;
+                }));
+                setCart(newCart);
+            };
+            if (cart.length > 0) refreshPrices();
+        }, [billMode]);
+
+        return (
+            <div className="billing-container">
+                <div>
+                    <div className="search-section">
+                        <div className="mode-toggle">
+                            <button className={`mode-btn ${billMode === 'retail' ? 'active' : ''}`} onClick={() => setBillMode('retail')}>
+                                <i className="fas fa-shopping-bag mr-2"></i>Retail Mode
+                            </button>
+                            <button className={`mode-btn ${billMode === 'wholesale' ? 'active' : ''}`} onClick={() => setBillMode('wholesale')}>
+                                <i className="fas fa-truck mr-2"></i>Wholesale Mode
+                            </button>
+                        </div>
+
+                        <ProductSearch 
+                            onAddProduct={addProduct} 
+                            scannerReady={scannerReady}
+                            setScannerReady={setScannerReady}
+                            billMode={billMode}
+                            toggleScanner={() => setScannerActive(!scannerActive)}
+                        />
+
+                        {scannerActive && (
+                            <ScannerModule 
+                                onScan={(text) => {
+                                    let productId = null;
+                                    if (text.startsWith("SNACK:")) productId = text.split(":")[1];
+                                    else if (/^\d+$/.test(text.trim())) productId = text.trim();
+                                    if (productId) addProductById(parseInt(productId));
+                                }}
+                                onClose={() => setScannerActive(false)}
+                                scannerReady={scannerReady}
+                                setScannerStatus={(status) => {
+                                    const reader = document.getElementById('reader');
+                                    if (reader) {
+                                        reader.style.outline = status === 'ready' ? "6px solid var(--danger)" : "6px solid var(--success)";
+                                    }
+                                    setScannerReady(status === 'ready');
+                                }}
+                            />
+                        )}
+
+                        <div className="mt-5">
+                            <h4 style={ { fontWeight: 800, borderBottom: '2px solid var(--border)', paddingBottom: '0.75rem', color: 'var(--text-main)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }>
+                                <span>Top Selling Items</span>
+                                <i className="fas fa-fire-alt" style={ { color: 'var(--warning)' } }></i>
+                            </h4>
+                            <div className="product-grid">
+                                {topItems.map((item, idx) => (
+                                    <div key={idx} className="product-btn" onClick={() => addProductById(item[0])}>
+                                        <i className="fas fa-box-open" style={ { color: 'var(--primary)', opacity: 0.8, fontSize: '1.2rem', marginBottom: 5 } }></i>
+                                        <span style={ { fontSize: '0.75rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' } }>{item[1]}</span>
+                                        <span style={ { fontSize: '0.7rem', color: 'var(--success)', fontWeight: 700 } }>₹{item[2]}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="search-section mt-4" style={ { background: 'var(--glass-bg)', opacity: 0.8 } }>
+                        <h4 style={ { fontWeight: 700, color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1rem', textTransform: 'uppercase', letterSpacing: '0.5px' } }>Recent Activity</h4>
+                        <div id="recent-list" style={ { fontSize: '0.9rem', color: 'var(--text-main)' } }>
+                            {cart.length > 0 ? `Total items: ${cart.length} | Mode: ${billMode.toUpperCase()}` : 'No items added yet. Click scan or search...'}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="cart-section">
+                    <h3 style={ { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', color: 'var(--text-main)' } }>
+                        <span>Current Bill</span>
+                        <span className="badge" style={ { background: 'var(--background)', color: 'var(--text-muted)' } }>{cart.length} Items</span>
+                    </h3>
+
+                    <div id="cart-items" style={ { minHeight: 200, maxHeight: 400, overflowY: 'auto', marginBottom: '1.5rem' } }>
+                        {cart.length === 0 ? (
+                            <div className="text-center text-muted mt-5" style={ { color: 'var(--text-muted)' } }>
+                                <i className="fas fa-shopping-cart" style={ { fontSize: '3rem', opacity: 0.1, display: 'block', marginBottom: 10 } }></i>
+                                Cart is empty
+                            </div>
+                        ) : (
+                            cart.map((item, idx) => (
+                                <div key={idx} className="cart-item" style={ { display: 'flex', justifyContent: 'space-between', marginBottom: 15, padding: 10, background: 'var(--background)', borderRadius: 12, border: '1px solid var(--border)' } }>
+                                    <div style={ { flex: 1 } }>
+                                        <div style={ { fontWeight: 600, color: 'var(--text-main)' } }>{item.name}</div>
+                                        <small style={ { color: 'var(--text-muted)' } }>₹{item.unit_price.toFixed(2)} / unit</small>
+                                    </div>
+                                    <div className="qty-control">
+                                        <button className="qty-btn" onClick={() => updateQty(item.id, -1)}>-</button>
+                                        <span style={ { minWidth: 25, textAlign: 'center', fontWeight: 700, color: 'var(--text-main)' } }>{item.qty}</span>
+                                        <button className="qty-btn" onClick={() => updateQty(item.id, 1)}>+</button>
+                                        <strong style={ { marginLeft: 10, minWidth: 60, textAlign: 'right', color: 'var(--text-main)' } }>₹{(item.unit_price * item.qty).toFixed(2)}</strong>
+                                        <button onClick={() => removeItem(item.id)} style={ { background: 'none', border: 'none', color: 'var(--danger)', marginLeft: 10, cursor: 'pointer' } }><i className="fas fa-times"></i></button>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+
+                    <div style={ { borderTop: '2px dashed var(--border)', paddingTop: '1.5rem' } }>
+                        <div style={ { display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', color: 'var(--text-main)' } }>
+                            <span style={ { color: 'var(--text-muted)' } }>Subtotal</span>
+                            <span>₹{subtotal.toFixed(2)}</span>
+                        </div>
+                        <div style={ { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', color: 'var(--text-main)' } }>
+                            <span style={ { color: 'var(--text-muted)' } }>Discount (₹)</span>
+                            <input 
+                                type="number" 
+                                value={discount} 
+                                onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
+                                style={ { width: 80, textAlign: 'right', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 5px', background: 'var(--input-bg)', color: 'var(--text-main)' } }
+                            />
+                        </div>
+                        <div style={ { display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem', fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)' } }>
+                            <span>Total</span>
+                            <span>₹{grandTotal.toFixed(2)}</span>
+                        </div>
+
+                        <div className="form-group" style={ { marginBottom: '1rem' } }>
+                            <label style={ { color: 'var(--text-main)' } }>Customer Name (Optional)</label>
+                            <input 
+                                type="text" 
+                                value={customerName}
+                                onChange={(e) => setCustomerName(e.target.value)}
+                                placeholder="Walk-in Customer" 
+                                className="form-control"
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label style={ { color: 'var(--text-main)' } }>Payment Method</label>
+                            <select 
+                                value={paymentMode}
+                                onChange={(e) => setPaymentMode(e.target.value)}
+                                className="form-control"
+                            >
+                                <option value="Cash">Cash</option>
+                                <option value="Online / UPI">Online / UPI</option>
+                                <option value="Card">Card</option>
+                                <option value="Credit">Store Credit</option>
+                            </select>
+                        </div>
+
+                        <button 
+                            className="btn btn-primary btn-block" 
+                            onClick={handleCheckout}
+                            disabled={loading}
+                        >
+                            {loading ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-check-double"></i>}
+                            {loading ? 'Processing...' : 'Complete Sale & Print'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('billing-root'));
+    root.render(<BillingApp />);
+</script>
+{% endblock %}
+
+{% endblock %}

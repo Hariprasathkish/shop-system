@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}Snacks Accounts{% endblock %}
+{% block content %}
+<div style="margin-bottom: 2rem;">
+    <a href="/snacks" class="btn btn-secondary">
+        <i class="fas fa-arrow-left"></i> Back to Snacks Menu
+    </a>
+</div>
+<div style="text-align: center; margin-bottom: 2.5rem; animation: fadeIn 0.8s ease-out;">
+    <h1 style="font-size: 2.5rem; background: linear-gradient(90deg, var(--primary), var(--accent)); -webkit-background-clip: text; background-clip: text; color: transparent;">Snacks Accounts</h1>
+    <p style="color: var(--text-muted);">Revenue, Profit Tracking & Sales Analytics</p>
+</div>
+
+<!-- DATE FILTER -->
+<div class="card mb-4" style="background: var(--card-bg); border: 1px solid var(--border);">
+    <form action="/snacks/accounts" method="GET" style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end;">
+        <div class="form-group" style="flex: 1; min-width: 150px;">
+            <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted);">Start Date</label>
+            <input type="date" name="start_date" value="{{ start_date }}" class="form-control" style="background: var(--input-bg); color: var(--text-main); border-color: var(--border);">
+        </div>
+        <div class="form-group" style="flex: 1; min-width: 150px;">
+            <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted);">End Date</label>
+            <input type="date" name="end_date" value="{{ end_date }}" class="form-control" style="background: var(--input-bg); color: var(--text-main); border-color: var(--border);">
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+            <button type="submit" class="btn btn-primary" style="padding: 0.6rem 1.5rem;">
+                <i class="fas fa-filter"></i> Filter
+            </button>
+            <a href="/snacks/accounts" class="btn btn-secondary" style="padding: 0.6rem 1rem;" title="Reset">
+                <i class="fas fa-sync"></i>
+            </a>
+        </div>
+    </form>
+</div>
+
+<!-- TOP STATS -->
+<div class="grid-4 mb-4">
+    <div class="card" style="text-align: center; border-bottom: 4px solid var(--success); background: var(--card-bg);">
+        <span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 600; text-transform: uppercase;">Today's Revenue</span>
+        <h2 style="margin: 5px 0; color: var(--success);">₹{{ "%.2f"|format(today_revenue) }}</h2>
+        <div style="display: flex; justify-content: center; gap: 10px; font-size: 0.75rem;">
+            <span style="color: var(--status-success-text);">C: ₹{{ today_cash }}</span>
+            <span style="color: var(--primary);">O: ₹{{ today_online }}</span>
+        </div>
+    </div>
+    <div class="card" style="text-align: center; border-bottom: 4px solid var(--primary); background: var(--card-bg);">
+        <span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 600; text-transform: uppercase;">{{ period_label }} Revenue</span>
+        <h2 style="margin: 5px 0; color: var(--primary);">₹{{ "%.2f"|format(total_revenue) }}</h2>
+        <div style="display: flex; justify-content: center; gap: 10px; font-size: 0.75rem;">
+            <span style="color: var(--status-success-text);">C: ₹{{ cash_total }}</span>
+            <span style="color: var(--primary);">O: ₹{{ online_total }}</span>
+        </div>
+    </div>
+    <div class="card" style="text-align: center; border-bottom: 4px solid var(--warning); background: var(--card-bg);">
+        <span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 600; text-transform: uppercase;">{{ period_label }} Profit</span>
+        <h2 style="margin: 5px 0; color: var(--warning);">₹{{ "%.2f"|format(total_profit) }}</h2>
+        <small style="color: var(--text-muted);">Total Gross Profit</small>
+    </div>
+    <div class="card" style="text-align: center; border-bottom: 4px solid var(--accent); background: var(--card-bg);">
+        <span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 600; text-transform: uppercase;">Report Center</span>
+        <div style="margin-top: 10px;">
+            <a href="/snacks/generate_summary?start_date={{ start_date }}&end_date={{ end_date }}" class="btn btn-primary btn-sm" style="width: 100%; border-radius: 8px; font-size: 0.8rem;">
+                <i class="fas fa-file-pdf"></i> Generate PDF
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="grid-2 mt-4" style="grid-template-columns: 2fr 1fr; align-items: start;">
+    <!-- Recent Bills -->
+    <div class="card" style="background: var(--card-bg); border: 1px solid var(--border);">
+        <h3 style="color: var(--text-main);"><i class="fas fa-file-invoice"></i> Recent Bill Sessions</h3>
+        <div class="table-container" style="background: transparent; border: none;">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="background: var(--table-th-bg); color: var(--table-th-text);">ID</th>
+                        <th style="background: var(--table-th-bg); color: var(--table-th-text);">Time</th>
+                        <th style="background: var(--table-th-bg); color: var(--table-th-text);">Customer</th>
+                        <th style="background: var(--table-th-bg); color: var(--table-th-text); text-align:right;">Mode</th>
+                        <th style="background: var(--table-th-bg); color: var(--table-th-text); text-align:right;">Total</th>
+                        <th style="background: var(--table-th-bg); color: var(--table-th-text); text-align:center;">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for bill in recent_bills %}
+                    <tr>
+                        <td style="color: var(--text-main);">#{{ bill[0] }}</td>
+                        <td style="font-size: 0.8rem; color: var(--text-muted);">{{ bill[1][5:16] }}</td>
+                        <td style="color: var(--text-main);">{{ bill[3] }}</td>
+                        <td style="text-align:right; font-size: 0.75rem;">
+                            <span class="badge" style="background:{% if bill[2]=='retail' %}var(--status-info-bg){% else %}var(--status-success-bg){% endif %}; color:{% if bill[2]=='retail' %}var(--status-info-text){% else %}var(--status-success-text){% endif %};">
+                                {{ bill[2] }}
+                            </span>
+                        </td>
+                        <td style="text-align:right; font-weight:700; color: var(--text-main);">
+                            <a href="/snacks/bill/{{ bill[0] }}" style="text-decoration:none; color:inherit;">₹{{ "%.2f"|format(bill[5]) }} <i class="fas fa-external-link-alt" style="font-size:0.6rem; opacity:0.5;"></i></a>
+                        </td>
+                        <td style="text-align:center;">
+                            {% if bill[6] == 'Pending' %}
+                                <form action="/snacks/mark_paid" method="POST" style="display:inline;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="bill_id" value="{{ bill[0] }}">
+                                    <button type="submit" class="btn btn-sm" style="background:var(--status-danger-bg); color:var(--status-danger-text); border:1px solid var(--danger); padding:2px 8px; font-size:0.7rem; border-radius:4px;">
+                                        <i class="fas fa-clock"></i> Mark Paid
+                                    </button>
+                                </form>
+                            {% else %}
+                                <span class="badge" style="background:var(--status-success-bg); color:var(--status-success-text); border:1px solid var(--success);">
+                                    <i class="fas fa-check-circle"></i> Paid
+                                </span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="text-center" style="color: var(--text-muted);">No bills yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Stats & Analytics -->
+    <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+        <div class="card" style="background: var(--card-bg); border: 1px solid var(--border);">
+            <h3 style="color: var(--text-main);"><i class="fas fa-star" style="color:var(--warning);"></i> Top Selling</h3>
+            <div class="table-container" style="padding: 0; background: transparent; border: none;">
+                <table style="font-size: 0.9rem;">
+                    <tbody>
+                        {% for prod in top_products %}
+                        <tr>
+                            <td style="color: var(--text-main); border-bottom-color: var(--border);">{{ prod[0] }}</td>
+                            <td style="text-align:right; font-weight:700; color: var(--primary); border-bottom-color: var(--border);">{{ prod[1] }} units</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card" style="background: var(--card-bg); border: 1px solid var(--border);">
+            <h3 style="color: var(--text-main);"><i class="fas fa-coins" style="color:var(--primary);"></i> Sale Breakdown</h3>
+            {% for mode in mode_summary %}
+            <div style="margin-bottom: 1rem;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span style="font-weight: 600; text-transform: capitalize; color: var(--text-main);">{{ mode[0] }}</span>
+                    <span style="color: var(--text-main);">₹{{ "%.2f"|format(mode[2]) }}</span>
+                </div>
+                <div style="height: 8px; background: var(--background); border-radius: 4px; overflow: hidden; border: 1px solid var(--border);">
+                    <div style="height: 100%; width: {{ (mode[2] / total_revenue * 100) if total_revenue > 0 else 0 }}%; background: {% if mode[0]=='retail' %}var(--accent){% else %}var(--primary){% endif %};"></div>
+                </div>
+                <small style="color: var(--text-muted);">{{ mode[1] }} bills issued</small>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="card" style="background: var(--card-bg); border: 1px solid var(--border);">
+            <h3 style="color: var(--text-main);"><i class="fas fa-credit-card" style="color:var(--success);"></i> Payment Mode</h3>
+            <div style="margin-bottom: 1rem;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span style="font-weight: 600; color: var(--text-main);">Cash</span>
+                    <span style="color: var(--text-main);">₹{{ "%.2f"|format(cash_total) }}</span>
+                </div>
+                <div style="height: 8px; background: var(--background); border-radius: 4px; overflow: hidden; border: 1px solid var(--border);">
+                    <div style="height: 100%; width: {{ (cash_total / total_revenue * 100) if total_revenue > 0 else 0 }}%; background: var(--success);"></div>
+                </div>
+            </div>
+            <div style="margin-bottom: 1rem;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span style="font-weight: 600; color: var(--text-main);">Online / Other</span>
+                    <span style="color: var(--text-main);">₹{{ "%.2f"|format(online_total) }}</span>
+                </div>
+                <div style="height: 8px; background: var(--background); border-radius: 4px; overflow: hidden; border: 1px solid var(--border);">
+                    <div style="height: 100%; width: {{ (online_total / total_revenue * 100) if total_revenue > 0 else 0 }}%; background: var(--primary);"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="text-center mt-5" style="margin-top: 5rem;">
+    <a href="/admin" class="btn btn-secondary">
+        <i class="fas fa-arrow-left"></i> Return to Admin Dashboard
+    </a>
+</div>
+{% endblock %}

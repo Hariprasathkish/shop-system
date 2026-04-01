@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}Monthly Report{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 500px; margin: 0 auto;">
+    <h1 class="text-center"><i class="fas fa-file-csv"></i> Generate Report</h1>
+    <p class="text-center text-muted">Select a month to download the CSV report.</p>
+
+    <form method="POST">
+        <div class="form-group">
+            <label>Select Month</label>
+            <input type="month" name="month" required class="form-control">
+        </div>
+
+        <div class="form-group">
+            <label>Export Format</label>
+            <select name="export_type" class="form-control">
+                <option value="csv">CSV (Excel)</option>
+                <option value="json">JSON (Data)</option>
+            </select>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block">
+            <i class="fas fa-download"></i> Download Report
+        </button>
+    </form>
+
+    <div class="text-center mt-4">
+        <a href="/dairy" class="btn btn-secondary">Back to Dairy Menu</a>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+
+{% block title %}Staff Payroll{% endblock %}
+
+{% block content %}
+<style>
+    .payroll-container {
+        padding: 20px;
+        animation: fadeIn 0.5s ease-out;
+    }
+
+    .staff-card {
+        background: var(--card-bg);
+        border-radius: 1rem;
+        border: 1px solid var(--border);
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: var(--shadow-sm);
+        transition: transform 0.2s;
+    }
+
+    .staff-card:hover {
+        transform: translateY(-2px);
+    }
+
+    .payroll-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+
+    .input-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    .input-group label {
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: var(--text-muted);
+        text-transform: uppercase;
+    }
+
+    .payroll-input {
+        padding: 0.5rem;
+        background: var(--input-bg);
+        border: 1px solid var(--border);
+        border-radius: 0.5rem;
+        font-size: 0.9rem;
+        color: var(--text-main);
+    }
+
+    .payroll-input:focus {
+        outline: 2px solid var(--primary);
+        border-color: var(--primary);
+    }
+
+    .total-badge {
+        background: var(--status-info-bg);
+        color: var(--status-info-text);
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.75rem;
+        font-weight: 800;
+        font-size: 1.1rem;
+        border: 1px solid var(--border);
+    }
+
+    .status-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.75rem;
+        border-radius: 1rem;
+        font-weight: 700;
+    }
+
+    .status-paid { background: var(--status-success-bg); color: var(--status-success-text); }
+    .status-pending { background: var(--status-warning-bg); color: var(--status-warning-text); }
+
+    .header-box {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+    }
+
+    /* Back Button Style */
+    .btn-back {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        border-radius: 0.75rem;
+        background: var(--surface-solid);
+        color: var(--text-main);
+        text-decoration: none;
+        font-weight: 700;
+        transition: all 0.2s;
+        border: 1px solid var(--border);
+    }
+
+    .btn-back:hover {
+        background: var(--background);
+        border-color: var(--primary);
+        transform: translateX(-4px);
+    }
+</style>
+
+<div id="payroll-root"></div>
+
+{% endblock %}
+
+{% block scripts %}
+<script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
+
+    const PayrollApp = () => {
+        const initialData = {
+            staff: JSON.parse('{{ staff_list|tojson|safe }}'),
+            payroll: JSON.parse('{{ payroll_entries|tojson|safe }}'),
+            monthStr: "{{ month_str }}"
+        };
+
+        const [month, setMonth] = useState(initialData.monthStr);
+        const [payrollData, setPayrollData] = useState({});
+        const [syncStatus, setSyncStatus] = useState('All changes saved');
+
+        // Initialize state from existing payroll entries
+        useEffect(() => {
+            const dataMap = {};
+            initialData.payroll.forEach(entry => {
+                dataMap[entry.staff_id] = entry;
+            });
+            setPayrollData(dataMap);
+        }, []);
+
+        const updateEntry = (staffId, field, value) => {
+            setPayrollData(prev => {
+                const current = prev[staffId] || {
+                    staff_id: staffId,
+                    month: month,
+                    base_salary: 0,
+                    commission: 0,
+                    deductions: 0,
+                    bonus: 0,
+                    payment_mode: 'Cash',
+                    notes: ''
+                };
+                return {
+                    ...prev,
+                    [staffId]: { ...current, [field]: value }
+                };
+            });
+        };
+
+        const saveEntry = (staffId) => {
+            setSyncStatus('Saving...');
+            const data = payrollData[staffId];
+            
+            fetch('/dairy/payroll', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    setSyncStatus('Entry saved successfully!');
+                    setTimeout(() => setSyncStatus('All changes saved'), 2000);
+                }
+            })
+            .catch(() => setSyncStatus('Error saving entry'));
+        };
+
+        const handleMonthChange = (newMonth) => {
+            window.location.href = `/dairy/payroll?month=${newMonth}`;
+        };
+
+        return (
+            <div className="payroll-container">
+                <div className="header-box">
+                    <div>
+                        <a href="/dairy" className="btn-back">
+                            <i className="fas fa-arrow-left"></i> Back to Dairy
+                        </a>
+                        <h1 style={ { marginTop: '1rem', marginBottom: 0, color: 'var(--text-main)' } }>
+                            <i className="fas fa-money-check-alt mr-2" style={ { color: 'var(--primary)' } }></i>
+                            Staff Payroll Management
+                        </h1>
+                        <p style={ { color: 'var(--text-muted)' } }>Record salaries, commissions and bonuses</p>
+                    </div>
+
+                    <div style={ { display: 'flex', gap: '1rem', alignItems: 'center' } }>
+                        <div style={ { background: 'var(--surface-solid)', padding: '0.5rem 1rem', borderRadius: '0.75rem', border: '1px solid var(--border)' } }>
+                            <label style={ { marginRight: '0.5rem', fontWeight: 700, color: 'var(--text-main)' } }>Month:</label>
+                            <input type="month" value={month} onChange={(e) => handleMonthChange(e.target.value)} className="payroll-input" />
+                        </div>
+                        <div className="status-badge status-paid">
+                            <i className="fas fa-sync-alt mr-1"></i> {syncStatus}
+                        </div>
+                    </div>
+                </div>
+
+                {initialData.staff.map(member => {
+                    const entry = payrollData[member.id] || { base_salary: 0, commission: 0, deductions: 0, bonus: 0, payment_mode: 'Cash', notes: '' };
+                    const total = (parseFloat(entry.base_salary || 0) + parseFloat(entry.commission || 0) + parseFloat(entry.bonus || 0)) - parseFloat(entry.deductions || 0);
+
+                    return (
+                        <div key={member.id} className="staff-card">
+                            <div style={ { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' } }>
+                                <div>
+                                    <h3 style={ { margin: 0, color: 'var(--text-main)' } }>{member.name}</h3>
+                                    <p style={ { margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' } }>@{member.username} | Staff ID: {member.id}</p>
+                                    <div style={ { marginTop: '0.5rem', fontSize: '0.9rem', color: 'var(--primary)', fontWeight: 700 } }>
+                                        <i className="fas fa-truck mr-1"></i> Distribution ({member.prev_month_label}): {member.prev_dist_qty} Packets
+                                    </div>
+                                </div>
+                                <div style={ { display: 'flex', gap: '1rem', alignItems: 'center' } }>
+                                    <div className="total-badge">
+                                        <span style={ { fontSize: '0.8rem', marginRight: '0.5rem' } }>NET PAY:</span>
+                                        ₹{total.toFixed(2)}
+                                    </div>
+                                    <a href={`/dairy/staff/payroll/${member.id}?month=${month}`} 
+                                       className="btn btn-secondary" 
+                                       style={ { borderRadius: '0.75rem', padding: '0.75rem' } } 
+                                       title="Download Pay Slip PDF">
+                                        <i className="fas fa-file-pdf text-danger"></i>
+                                    </a>
+                                </div>
+                            </div>
+
+                            <div className="payroll-grid">
+                                <div className="input-group">
+                                    <label>Base Salary</label>
+                                    <input type="number" value={entry.base_salary} onChange={e => updateEntry(member.id, 'base_salary', e.target.value)} className="payroll-input" />
+                                </div>
+                                <div className="input-group">
+                                    <label>Commission</label>
+                                    <input type="number" value={entry.commission} onChange={e => updateEntry(member.id, 'commission', e.target.value)} className="payroll-input" />
+                                </div>
+                                <div className="input-group">
+                                    <label>Bonus</label>
+                                    <input type="number" value={entry.bonus} onChange={e => updateEntry(member.id, 'bonus', e.target.value)} className="payroll-input" />
+                                </div>
+                                <div className="input-group">
+                                    <label>Deductions</label>
+                                    <input type="number" value={entry.deductions} onChange={e => updateEntry(member.id, 'deductions', e.target.value)} className="payroll-input" />
+                                </div>
+                                <div className="input-group">
+                                    <label>Payment Mode</label>
+                                    <select value={entry.payment_mode} onChange={e => updateEntry(member.id, 'payment_mode', e.target.value)} className="payroll-input">
+                                        <option value="Cash">Cash</option>
+                                        <option value="Online">Online / UPI</option>
+                                        <option value="Bank Transfer">Bank Transfer</option>
+                                    </select>
+                                </div>
+                                <div className="input-group" style={ { gridColumn: 'span 2' } }>
+                                    <label>Notes</label>
+                                    <input type="text" placeholder="e.g. Festival bonus, Late deductions..." value={entry.notes} onChange={e => updateEntry(member.id, 'notes', e.target.value)} className="payroll-input" />
+                                </div>
+                                <div style={ { display: 'flex', alignItems: 'flex-end' } }>
+                                    <button onClick={() => saveEntry(member.id)} className="btn btn-primary btn-block" style={ { borderRadius: '0.5rem', fontWeight: 800 } }>
+                                        <i className="fas fa-save mr-2"></i> Save Entry
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })}
+
+                {initialData.staff.length === 0 && <div className="card text-center text-muted" style={ { background: 'var(--card-bg)', color: 'var(--text-muted)', border: '1px solid var(--border)' } }>No staff members found. Add staff in "Manage Staff" first.</div>}
+            </div>
+        );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('payroll-root'));
+    root.render(<PayrollApp />);
+</script>
+{% endblock %}

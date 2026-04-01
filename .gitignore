@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+ENV/
+
+# Database files (use cloud PostgreSQL in production)
+*.db
+*.sqlite3
+
+# Environment variables (Secrets — set in Render/Vercel dashboard)
+.env
+
+# IDEs
+.vscode/
+.idea/
+
+# Distribution / builds
+dist/
+build/
+*.egg-info/
+
+# Debug & migration helper scripts (not needed in production)
+check_*.py
+debug_*.py
+dump_*.py
+get_*.py
+fix_*.py
+list_*.py
+migrate_*.py
+migration_script.py
+run_migration.py
+update_schema.py
+verify_*.py
+test_*.py
+ensure_db.py
+clear_payments.py
+read_pdfs.py
+create_zip.py
+
+# Output / report files
+*.txt
+*.csv
+*.zip
+reports/
+
+# Uploaded user files (use cloud storage in production)
+# static/uploads/

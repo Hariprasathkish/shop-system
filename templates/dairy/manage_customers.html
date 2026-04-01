@@ -1,0 +1,366 @@
+{% extends "base.html" %}
+
+{% block title %}Dairy Customers | Hari Sakthi{% endblock %}
+
+{% block content %}
+<div class="animate-fade-in" style="margin-bottom: 3.5rem; display: flex; justify-content: space-between; align-items: flex-end;">
+    <div>
+        <h1 class="text-gradient" style="font-size: 3rem;">Customer Module</h1>
+        <p class="text-muted" style="font-weight: 600;">Manage dairy customer subscriptions, delivery slots, and profiles.</p>
+    </div>
+    
+    <div style="display: flex; gap: 1rem;">
+        <button onclick="resetForm()" class="btn btn-secondary" style="background: var(--surface); border: 1px solid var(--border); color: var(--text-main);"><i class="fas fa-plus-circle"></i> New Customer</button>
+        <a href="/admin" class="btn btn-secondary" style="background: var(--surface); border: 1px solid var(--border); color: var(--text-main);"><i class="fas fa-arrow-left"></i> Terminal</a>
+    </div>
+</div>
+
+<div style="display: flex; gap: 2rem; align-items: flex-start; padding-bottom: 2rem; min-width: 1000px;">
+    <!-- Add/Edit Customer Card -->
+    <div class="card" style="width: 380px; flex-shrink: 0; padding: 2rem; position: sticky; top: 2rem; border: 2px solid var(--primary); z-index: 100; max-height: calc(100vh - 4rem); overflow-y: auto; scrollbar-width: thin;">
+        <h2 id="form-title" style="margin-bottom: 2rem;"><i class="fas fa-user-plus text-gradient"></i> Registration Engine</h2>
+        <form method="POST" id="customer-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" id="form-action" value="add">
+            <input type="hidden" name="customer_id" id="customer_id">
+            <input type="hidden" name="last_bill_generated_on" id="last_bill_generated_on">
+
+            <div class="form-group">
+                <label><i class="fas fa-signature"></i> Name</label>
+                <input type="text" name="name" id="name" placeholder="John Doe" required>
+            </div>
+            
+            <div class="grid-2">
+                <div class="form-group">
+                    <label><i class="fas fa-phone"></i> Contact</label>
+                    <input type="text" name="phone" id="phone" placeholder="9876543210">
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-lock"></i> Access PIN</label>
+                    <input type="text" name="password" id="password" placeholder="Leave blank to keep current">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label><i class="fas fa-map-marker-alt"></i> Customer Address</label>
+                <input type="text" name="address" id="address" placeholder="123 Street, Lane 4">
+            </div>
+
+            <div class="form-group">
+                <label style="display: flex; justify-content: space-between; align-items: center;">
+                    <span><i class="fas fa-box-open"></i> Subscribed Milk</span>
+                    <button type="button" class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.75rem; border-radius: 0.5rem;" onclick="addProductRow()">+ Add Row</button>
+                </label>
+                <div class="table-container" style="background: var(--background); margin-top: 1rem; border-radius: 1rem;">
+                    <table style="font-size: 0.85rem;">
+                        <thead>
+                            <tr>
+                                <th style="padding: 0.75rem;">Product</th>
+                                <th style="padding: 0.75rem; width: 60px;">Qty</th>
+                                <th style="padding: 0.75rem; width: 80px;">Rate</th>
+                                <th style="padding: 0.75rem; width: 40px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="product-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="grid-2" style="margin-top: 2rem;">
+                <div class="form-group">
+                    <label><i class="fas fa-truck-ramp-box"></i> Slot</label>
+                    <input type="number" name="delivery_order" id="delivery_order" value="9999" style="text-align: center;">
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-coins"></i> Service Fee</label>
+                    <input type="number" step="0.1" name="service_charge" id="service_charge" value="0.0" style="text-align: center;">
+                </div>
+            </div>
+
+            <div class="grid-2">
+                <div class="form-group">
+                    <label><i class="fas fa-clock"></i> Billing Cycle</label>
+                    <select name="billing_type" id="billing_type" style="border-radius: 1rem;">
+                        <option value="current_month">Current Month (1st - 31st)</option>
+                        <option value="reservation">Reservation (16th - 15th)</option>
+                        <option value="month_end">Month End (Previous Month)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-wallet"></i> Arrears</label>
+                    <input type="number" step="0.01" name="net_payable" id="net_payable" value="0.0" style="text-align: center;">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label><i class="fas fa-user-shield"></i> Assigned Fleet</label>
+                <select name="delivery_staff_id" id="delivery_staff_id" style="border-radius: 1rem;">
+                    <option value="">Unassigned</option>
+                    {% for staff in staff_list %}
+                    <option value="{{ staff[0] }}">{{ staff[3] }} (Fleet ID: {{ staff[0] }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div style="display: flex; gap: 1rem; margin-top: 3rem;">
+                <button type="submit" id="submit-btn" class="btn btn-primary btn-block" style="height: 4rem; border-radius: 1.25rem;">CREATE ASSET</button>
+                <button type="button" id="cancel-btn" class="btn btn-secondary" onclick="resetForm()" style="display: none; height: 4rem; border-radius: 1.25rem;">RESET</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Search & List Header and Customer List React Root -->
+    <div style="flex: 1; min-width: 0;">
+        <div style="margin-bottom: 1.5rem; display: flex; gap: 1rem; align-items: center;">
+            <div class="card" style="flex: 1; padding: 0.75rem 1.25rem; display: flex; align-items: center; gap: 1rem; border: 1px solid var(--border);">
+                <i class="fas fa-search" style="opacity: 0.5;"></i>
+                <input type="text" id="customer-search-input" placeholder="Search by name, phone or slot ID..." 
+                       style="border: none; background: transparent; width: 100%; outline: none; font-weight: 600; font-size: 0.9rem;">
+            </div>
+        </div>
+
+        <!-- Customer List React Root -->
+        <div id="customers-react-root" class="animate-fade-in" style="animation-delay: 0.2s;">
+            <div class="card" style="padding: 10rem; text-align: center;">
+                <i class="fas fa-sync fa-spin fa-2x text-gradient"></i>
+                <p style="margin-top: 2rem; font-weight: 700;">INITIALIZING ASSET REPOSITORY...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Premium Delete Modal -->
+<div id="confirm-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); z-index: 5000; justify-content: center; align-items: center;">
+    <div class="card" style="width: 440px; text-align: center; border: 2px solid var(--danger);">
+        <h2 style="color: var(--danger); margin-bottom: 1rem;">Delete Customer?</h2>
+        <p id="confirm-modal-msg" style="margin-bottom: 2.5rem; font-weight: 600; color: var(--text-muted);"></p>
+        <div style="display: flex; gap: 1rem;">
+            <button onclick="cancelDelete()" class="btn btn-secondary" style="flex: 1;">Cancel</button>
+            <button onclick="confirmDelete()" class="btn btn-primary" style="flex: 1; background: var(--danger);">Confirm Termination</button>
+        </div>
+    </div>
+</div>
+
+<form id="delete-customer-form" action="/dairy/customers" method="POST" style="display: none;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="delete">
+    <input type="hidden" name="customer_id" id="delete-customer-id">
+</form>
+
+<script>
+    window.INITIAL_CONFIG = {
+        customers: {{ customers | tojson }},
+        staff: {{ staff_list | tojson }},
+        masterProducts: {{ master_products_json | safe }}
+    };
+    
+    const productOptions = window.INITIAL_CONFIG.masterProducts || [];
+
+    function addProductRow(name = "", qty = 1, price = null) {
+        const tbody = document.getElementById('product-table-body');
+        const tr = document.createElement('tr');
+        
+        let optionsHtml = '<option value="">Select...</option>';
+        productOptions.forEach(opt => {
+            optionsHtml += `<option value="${opt.name}" data-price="${opt.defaultPrice}" ${opt.name === name ? 'selected' : ''}>${opt.name}</option>`;
+        });
+        
+        if(price === null && productOptions.length > 0) {
+            price = name ? (productOptions.find(o => o.name === name)?.defaultPrice || 50) : productOptions[0].defaultPrice;
+        }
+
+        tr.innerHTML = `
+            <td style="padding: 4px;"><select name="product_name[]" onchange="const p = this.options[this.selectedIndex].getAttribute('data-price'); if(p) this.closest('tr').querySelector('.price-in').value = p;" style="padding: 8px; background: var(--input-bg); color: var(--text-main); border: 1px solid var(--border);">${optionsHtml}</select></td>
+            <td style="padding: 4px;"><input type="number" step="0.5" name="product_qty[]" value="${qty}" style="padding: 8px; text-align: center; background: var(--input-bg); color: var(--text-main); border: 1px solid var(--border);"></td>
+            <td style="padding: 4px;"><input type="number" step="0.1" name="product_price[]" value="${price}" class="price-in" style="padding: 8px; text-align: center; background: var(--input-bg); color: var(--text-main); border: 1px solid var(--border);"></td>
+            <td style="padding: 4px;"><button type="button" class="btn btn-secondary" onclick="this.closest('tr').remove()" style="padding: 4px 8px; border-radius: 8px; color: var(--danger); background: var(--surface); border: 1px solid var(--border);">&times;</button></td>
+        `;
+        tbody.appendChild(tr);
+    }
+
+    function editCustomer(c) {
+        document.getElementById('form-title').innerText = 'Modify Customer Details';
+        document.getElementById('form-action').value = 'edit';
+        document.getElementById('customer_id').value = c[0];
+        document.getElementById('submit-btn').innerText = 'SAVE CHANGES';
+        document.getElementById('cancel-btn').style.display = 'block';
+
+        document.getElementById('name').value = c[1];
+        document.getElementById('phone').value = c[2] || '';
+        document.getElementById('address').value = c[3] || '';
+        document.getElementById('service_charge').value = c[7];
+        document.getElementById('delivery_staff_id').value = c[8] || '';
+        document.getElementById('delivery_order').value = c[10];
+        document.getElementById('billing_type').value = c[11] || 'current_month';
+        document.getElementById('net_payable').value = c[14] || 0.0;
+        document.getElementById('password').value = ""; // Don't show password hash
+        
+        const tbody = document.getElementById('product-table-body');
+        tbody.innerHTML = '';
+        const prods = Array.isArray(c[17]) ? c[17] : [];
+        if (prods.length > 0) prods.forEach(p => addProductRow(p[1], p[2], p[3]));
+        else addProductRow();
+        
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function resetForm() {
+        document.getElementById('customer-form').reset();
+        document.getElementById('product-table-body').innerHTML = '';
+        addProductRow();
+        document.getElementById('form-title').innerText = 'Registration Engine';
+        document.getElementById('form-action').value = 'add';
+        document.getElementById('customer_id').value = '';
+        document.getElementById('submit-btn').innerText = 'ADD CUSTOMER';
+        document.getElementById('net_payable').value = 0.0;
+        document.getElementById('cancel-btn').style.display = 'none';
+    }
+
+    window.onload = () => addProductRow();
+
+    function deleteCustomer(id, name) {
+        document.getElementById('delete-customer-id').value = id;
+        document.getElementById('confirm-modal-msg').innerText = `Permanently delete customer "${name}" (ID: ${id}) from the database?`;
+        document.getElementById('confirm-modal').style.display = 'flex';
+    }
+    function confirmDelete() { document.getElementById('delete-customer-form').submit(); }
+    function cancelDelete() { document.getElementById('confirm-modal').style.display = 'none'; }
+
+    window.fetchAssetList = async () => {
+        const r = await fetch(window.location.href, { headers: { 'Accept': 'application/json' } });
+        return await r.json();
+    };
+</script>
+
+<script type="text/babel">
+{% raw %}
+    const { useState, useEffect, useMemo } = React;
+    
+    const AssetList = () => {
+        const [assets, setAssets] = useState(window.INITIAL_CONFIG.customers || []);
+        const [search, setSearch] = useState("");
+
+        useEffect(() => {
+            const input = document.getElementById('customer-search-input');
+            const handler = (e) => setSearch(e.target.value);
+            input?.addEventListener('input', handler);
+            return () => input?.removeEventListener('input', handler);
+        }, []);
+
+        const filtered = useMemo(() => {
+            const s = (search || "").toLowerCase();
+            return (assets || []).filter(a => 
+                (a[1] || "").toLowerCase().includes(s) || 
+                (a[2] || "").includes(s) || 
+                String(a[10] || "").includes(s)
+            );
+        }, [assets, search]);
+
+        const groupedStaff = useMemo(() => {
+            const staffMap = {};
+            const staffList = window.INITIAL_CONFIG.staff || [];
+            
+            staffMap['unassigned'] = { id: '', name: 'Unassigned Customers', customers: [] };
+            
+            staffList.forEach(s => {
+                staffMap[s[0]] = { id: s[0], name: s[3], customers: [] };
+            });
+
+            filtered.forEach(a => {
+                const sid = a[8];
+                if (sid && staffMap[sid]) {
+                    staffMap[sid].customers.push(a);
+                } else {
+                    staffMap['unassigned'].customers.push(a);
+                }
+            });
+            
+            return Object.values(staffMap)
+                .map(g => {
+                    g.customers.sort((a,b) => (a[10]||9999) - (b[10]||9999));
+                    return g;
+                })
+                .filter(g => g.customers.length > 0);
+        }, [filtered]);
+
+        return (
+            <div className="animate-fade-in" style={{ 
+                background: 'transparent', border: 'none', boxShadow: 'none', 
+                overflowY: 'visible', overflowX: 'visible',
+                zIndex: 1
+            }}>
+                {groupedStaff.map(group => (
+                    <div key={group.id || 'unassigned'} style={{ marginBottom: '2.5rem', background: 'var(--surface)', borderRadius: '1rem', overflow: 'hidden', border: '1px solid var(--border)', boxShadow: 'var(--shadow)' }}>
+                        <h3 style={{ padding: '1rem 1.5rem', margin: 0, background: 'var(--table-th-bg)', color: 'var(--table-th-text)', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>
+                                {group.id ? <i className="fas fa-truck mr-2" style={{color: '#6366f1'}}></i> : <i className="fas fa-exclamation-triangle mr-2" style={{color: '#ef4444'}}></i>}
+                                {group.name}
+                            </span>
+                            <span className="badge" style={{ background: 'var(--primary)', color: 'white', fontWeight: 800, padding: '0.3rem 0.8rem', borderRadius: '12px' }}>{group.customers.length} Customers</span>
+                        </h3>
+                        <div style={{ overflowX: 'auto', maxHeight: '500px', overflowY: 'auto', scrollbarWidth: 'thin' }}>
+                            <table style={{ fontSize: '0.8rem', width: '100%', borderCollapse: 'collapse' }}>
+                                <thead>
+                                    <tr style={{ background: 'rgba(0,0,0,0.02)', color: 'var(--text-muted)', position: 'sticky', top: 0, zIndex: 10, backdropFilter: 'blur(8px)' }}>
+                                        <th style={{ padding: '0.75rem 1rem', width: '170px', textAlign: 'left' }}>DELIVERY SEC / SLOT</th>
+                                        <th style={{ padding: '0.75rem 1rem', textAlign: 'left' }}>CUSTOMER / CONTACT</th>
+                                        <th style={{ padding: '0.75rem 1rem', textAlign: 'left' }}>MILK SUBSCRIPTIONS</th>
+                                        <th style={{ padding: '0.75rem 1rem', textAlign: 'center' }}>ARREARS</th>
+                                        <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>ACTIONS</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {group.customers.map(a => (
+                                        <tr key={a[0]} style={{ borderBottom: '1px solid var(--border)' }}>
+                                <td style={{ padding: '0.6rem 1rem' }}>
+                                    <div className="badge badge-warning" style={{ fontSize: '0.7rem', fontWeight: 800, padding: '0.2rem 0.5rem' }}>{a[10]}</div>
+                                    <div style={{ fontSize: '0.65rem', fontWeight: 700, marginTop: '0.3rem', color: 'var(--text-muted)' }}>
+                                        Sign-in ID: <span style={{ color: 'var(--primary)' }}>#{a[0]}</span>
+                                    </div>
+                                </td>
+                                <td style={{ padding: '0.6rem 1rem' }}>
+                                    <div style={{ fontWeight: 800, color: 'var(--text-main)', fontSize: '0.85rem' }}>{a[1]}</div>
+                                    <div style={{ fontSize: '0.7rem', opacity: 0.6, fontWeight: 600 }}>{a[2]}</div>
+                                </td>
+                                <td style={{ padding: '0.6rem 1rem' }}>
+                                    {(a[17] || []).map((p, i) => (
+                                        <div key={i} style={{ fontSize: '0.75rem', fontWeight: 600, display: 'flex', gap: '0.5rem' }}>
+                                            <span>• {p[1]}</span>
+                                            <span style={{ opacity: 0.7 }}>({p[2]})</span>
+                                        </div>
+                                    ))}
+                                    <div style={{ fontSize: '0.65rem', color: 'var(--accent)', fontWeight: 800, marginTop: '0.25rem' }}>₹{a[7]} | {a[11]}</div>
+                                </td>
+                                <td style={{ padding: '0.6rem 1rem', textAlign: 'center' }}>
+                                    <div className="badge" style={{ 
+                                        background: a[14] > 0 ? 'rgba(255, 71, 87, 0.1)' : 'rgba(46, 213, 115, 0.1)',
+                                        color: a[14] > 0 ? 'var(--danger)' : 'var(--success)',
+                                        border: `1px solid ${a[14] > 0 ? 'var(--danger)' : 'var(--success)'}`,
+                                        fontSize: '0.75rem', fontWeight: 800
+                                    }}>
+                                        ₹{parseFloat(a[14]).toFixed(2)}
+                                    </div>
+                                </td>
+                                <td style={{ padding: '0.6rem 1rem', textAlign: 'right' }}>
+                                    <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end' }}>
+                                        <button onClick={() => window.editCustomer(a)} className="btn btn-secondary" style={{ padding: '0.35rem 0.7rem', borderRadius: '0.5rem' }}><i className="fas fa-edit"></i></button>
+                                        <button onClick={() => window.deleteCustomer(a[0], a[1])} className="btn btn-secondary" style={{ padding: '0.35rem 0.7rem', borderRadius: '0.5rem', color: 'var(--danger)' }}><i className="fas fa-trash"></i></button>
+                                    </div>
+                                </td>
+                            </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        );
+    };
+
+    const container = document.getElementById('customers-react-root');
+    const root = ReactDOM.createRoot(container);
+    root.render(<AssetList />);
+{% endraw %}
+</script>
+{% endblock %}

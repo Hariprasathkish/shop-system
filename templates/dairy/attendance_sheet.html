@@ -1,0 +1,705 @@
+{% extends "base.html" %}
+
+{% block title %}Monthly Attendance Grid{% endblock %}
+
+{% block content %}
+<style>
+    :root {
+        --sheet-extra-header-bg: #e0f2fe;
+        --sheet-extra-header-text: #075985;
+        --sheet-pay-date-header-bg: #ede9fe;
+        --sheet-pay-date-header-text: #5b21b6;
+        --sheet-pay-mode-header-bg: #dcfce7;
+        --sheet-pay-mode-header-text: #166534;
+        --sheet-extra-col-bg: rgba(59,130,246,0.08);
+        --sheet-pay-date-col-bg: rgba(99,102,241,0.07);
+        --sheet-pay-mode-col-bg: rgba(16,185,129,0.08);
+        --sheet-entry-bg: rgba(255,255,255,0.7);
+        --sheet-entry-border: var(--border);
+        --sheet-input-bg: var(--card-bg);
+        --sheet-input-text: var(--text-main);
+    }
+    [data-theme="dark"] {
+        --sheet-extra-header-bg: #0f2740;
+        --sheet-extra-header-text: #8fd4ff;
+        --sheet-pay-date-header-bg: #25163f;
+        --sheet-pay-date-header-text: #c4b5fd;
+        --sheet-pay-mode-header-bg: #0d2e25;
+        --sheet-pay-mode-header-text: #86efac;
+        --sheet-extra-col-bg: rgba(14, 116, 144, 0.22);
+        --sheet-pay-date-col-bg: rgba(91, 33, 182, 0.22);
+        --sheet-pay-mode-col-bg: rgba(5, 150, 105, 0.22);
+        --sheet-entry-bg: rgba(15, 23, 42, 0.86);
+        --sheet-entry-border: rgba(148, 163, 184, 0.35);
+        --sheet-input-bg: #111827;
+        --sheet-input-text: #f8fafc;
+    }
+    .grid-page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+    .grid-page-title {
+        font-size: 2rem;
+        font-weight: 900;
+        background: linear-gradient(135deg, #6366f1, #9b59b6);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    .grid-controls { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+    .month-picker-box {
+        display: flex; align-items: center; gap: 0.75rem;
+        background: var(--card-bg); border: 2px solid var(--border);
+        border-radius: 0.75rem; padding: 0.5rem 1rem;
+    }
+    .month-picker-box label {
+        font-size: 0.72rem; font-weight: 800; color: var(--text-muted);
+        text-transform: uppercase; letter-spacing: 0.08em; margin: 0;
+    }
+    .month-picker-box input[type="month"] {
+        border: none; background: transparent; font-size: 0.95rem;
+        font-weight: 700; color: var(--text-main); padding: 0; height: 32px;
+    }
+    .sync-badge {
+        display: flex; align-items: center; gap: 0.4rem;
+        padding: 0.5rem 1rem; border-radius: 0.75rem;
+        font-size: 0.78rem; font-weight: 800; text-transform: uppercase;
+        letter-spacing: 0.06em; transition: background 0.3s, color 0.3s;
+    }
+    .sync-synced { background: #d1fae5; color: #065f46; }
+    .sync-saving { background: #fef3c7; color: #92400e; }
+    .sync-error  { background: #fee2e2; color: #991b1b; }
+
+    .sheet-wrapper {
+        width: 100%; overflow-x: auto; overflow-y: auto; max-height: 80vh;
+        border: 1px solid var(--border);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.05); background: var(--card-bg);
+    }
+
+    .ag-table { border-collapse: separate; border-spacing: 0; font-size: 12.5px; min-width: 100%; }
+    .ag-table th, .ag-table td {
+        border: 1px solid var(--border); padding: 7px 9px;
+        text-align: center; white-space: nowrap;
+        vertical-align: middle; color: var(--text-main);
+    }
+    .ag-table thead th {
+        position: sticky; top: 0; z-index: 50;
+        background: var(--table-th-bg); color: var(--table-th-text);
+        font-weight: 800; text-transform: uppercase;
+        font-size: 10px; letter-spacing: 0.06em; height: 54px;
+    }
+
+    /* Sticky columns */
+    .col-name {
+        position: sticky; left: 0; z-index: 45;
+        background: var(--card-bg) !important;
+        color: var(--text-main) !important;
+        min-width: 175px; width: 175px; max-width: 175px; text-align: left;
+        border-right: 3px solid var(--border); padding-left: 1rem;
+        box-sizing: border-box; overflow: hidden;
+    }
+    .col-product {
+        position: sticky; left: 175px; z-index: 45;
+        background: var(--card-bg) !important;
+        color: var(--text-main) !important;
+        min-width: 125px; width: 125px; max-width: 125px; text-align: left;
+        border-right: 2px solid var(--border);
+        box-sizing: border-box; overflow: hidden;
+    }
+    thead th.col-name, thead th.col-product { z-index: 60; }
+
+    .col-total {
+        min-width: 55px;
+        background: rgba(99,102,241,0.07) !important;
+        font-weight: 900; color: #6366f1;
+    }
+
+    /* Day header colors */
+    .day-regular  { background: #eef2ff !important; color: #3730a3 !important; }
+    .day-saturday { background: #fffbeb !important; color: #92400e !important; }
+    .day-sunday   { background: #fff1f2 !important; color: #be123c !important; }
+
+    /* Day body cells */
+    .cell-present { background: #dcfce7 !important; }
+    .cell-absent  { background: #fee2e2 !important; }
+
+    /* Qty input */
+    .qty-inp {
+        width: 44px; padding: 4px 2px;
+        border: 2px solid var(--border); border-radius: 0.375rem;
+        text-align: center; font-weight: 700; font-size: 0.82rem;
+        transition: 0.15s; background: transparent; color: var(--text-main);
+    }
+    .qty-inp:focus {
+        border-color: #6366f1; outline: none;
+        box-shadow: 0 0 0 3px rgba(99,102,241,0.15); background: var(--card-bg);
+    }
+    
+    /* Disable global tr:hover from style.css for this grid */
+    .ag-table tr:hover td { background: inherit !important; }
+    .ag-table tr:hover td.col-name, 
+    .ag-table tr:hover td.col-product { background: var(--card-bg) !important; }
+    .ag-table tr:hover td.cell-present { background: #dcfce7 !important; }
+    .ag-table tr:hover td.cell-absent  { background: #fee2e2 !important; }
+    .ag-table tr:hover td.col-total    { background: rgba(99,102,241,0.07) !important; }
+
+    /* Hide number arrows for all number inputs */
+    input[type="number"]::-webkit-inner-spin-button, 
+    input[type="number"]::-webkit-outer-spin-button { 
+        -webkit-appearance: none; margin: 0; 
+    }
+    input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+
+    /* Payment Columns at the End */
+    .col-pay-date { min-width: 150px; background: var(--sheet-pay-date-col-bg) !important; }
+    .col-pay-mode { min-width: 130px; background: var(--sheet-pay-mode-col-bg) !important; }
+    .col-extra    { min-width: 200px; background: var(--sheet-extra-col-bg) !important; }
+    .ag-table thead th.col-extra {
+        background: var(--sheet-extra-header-bg) !important;
+        color: var(--sheet-extra-header-text) !important;
+    }
+    .ag-table thead th.col-pay-date {
+        background: var(--sheet-pay-date-header-bg) !important;
+        color: var(--sheet-pay-date-header-text) !important;
+    }
+    .ag-table thead th.col-pay-mode {
+        background: var(--sheet-pay-mode-header-bg) !important;
+        color: var(--sheet-pay-mode-header-text) !important;
+    }
+
+    .pay-entry-box {
+        display: flex; flex-direction: column; gap: 4px; padding: 4px;
+        background: var(--sheet-entry-bg); border-radius: 0.5rem;
+        border: 1px dashed var(--sheet-entry-border);
+    }
+    .pay-inp-date {
+        width: 100%; border: 1.5px solid #6366f1; border-radius: 0.4rem;
+        font-size: 0.72rem; font-weight: 700; padding: 3px 5px;
+        background: var(--sheet-input-bg); color: var(--sheet-input-text);
+        box-sizing: border-box; display: block;
+    }
+    .pay-inp-mode {
+        width: 100%; border: 1.5px solid #10b981; border-radius: 0.4rem;
+        font-size: 0.72rem; font-weight: 700; padding: 3px 5px;
+        background: var(--sheet-input-bg); color: var(--sheet-input-text);
+        box-sizing: border-box; display: block;
+    }
+    .pay-inp-amt {
+        width: 100%; max-width: 100%; min-width: 50px; border: 1.5px solid var(--border); border-radius: 0.4rem;
+        font-size: 0.72rem; font-weight: 700; padding: 4px 5px;
+        background: var(--sheet-input-bg); color: var(--sheet-input-text);
+        box-sizing: border-box; display: block;
+    }
+    .btn-save-pay {
+        width: 100%; padding: 4px; background: #6366f1; color: white;
+        border: none; border-radius: 0.4rem; font-size: 0.7rem; font-weight: 800;
+        cursor: pointer; transition: 0.2s;
+    }
+    .btn-save-pay:hover { filter: brightness(1.1); }
+
+    .pay-history-item {
+        display: block; font-size: 0.65rem; font-weight: 800;
+        padding: 2px 6px; border-radius: 12px; margin-bottom: 2px;
+        text-align: left;
+    }
+    .hist-cash   { background: #d1fae5; color: #065f46; }
+    .hist-online { background: #dbeafe; color: #1e40af; }
+
+    /* Extra row */
+    .extra-row { background: var(--sheet-extra-col-bg) !important; }
+    .extra-label { font-size: 0.7rem; font-weight: 700; color: #3b82f6; }
+    .btn-del-extra { border: none; background: none; color: #ef4444; cursor: pointer; padding: 0 3px; font-size: 0.8rem; }
+
+    /* Inline add-extra row */
+    .add-extra-row { background: var(--sheet-pay-mode-col-bg) !important; }
+    .add-extra-form { display: flex; gap: 0.3rem; align-items: center; flex-wrap: wrap; padding: 4px 0; }
+    .add-extra-form input, .add-extra-form select {
+        padding: 3px 6px; border: 1.5px solid var(--border); border-radius: 0.4rem;
+        font-size: 0.7rem; font-weight: 600; background: var(--card-bg); color: var(--text-main); height: 26px;
+    }
+    .add-extra-form select { min-width: 90px; }
+    .add-extra-form input[type="date"]   { width: 105px; }
+    .add-extra-form input[type="number"] { width: 50px; }
+    .btn-add-extra {
+        padding: 3px 10px; background: #10b981; color: white;
+        border: none; border-radius: 0.4rem; font-size: 0.7rem; font-weight: 800;
+        cursor: pointer; height: 26px; transition: 0.15s;
+    }
+    .btn-add-extra:hover { filter: brightness(1.1); }
+    .pay-inp-date::-webkit-calendar-picker-indicator {
+        filter: var(--sheet-calendar-icon-filter, none);
+    }
+    [data-theme="dark"] .pay-inp-date::-webkit-calendar-picker-indicator {
+        filter: invert(1) brightness(1.1);
+    }
+</style>
+
+<div class="animate-fade-in">
+    <div id="attendance-root">
+        <div style="padding:8rem;text-align:center;">
+            <i class="fas fa-spinner fa-spin fa-2x" style="color:var(--primary);"></i>
+            <p style="margin-top:1.5rem;font-weight:700;color:var(--text-muted);">Loading grid…</p>
+        </div>
+    </div>
+</div>
+
+<script>
+window.INITIAL_CONFIG = {
+    customers:       JSON.parse('{{ customers | tojson | safe }}'),
+    days:            JSON.parse('{{ days | map("string") | list | tojson | safe }}'),
+    logsMap:         JSON.parse('{{ logs_map | tojson | safe }}'),
+    paymentsMap:     JSON.parse('{{ payments | tojson | safe }}'),
+    role:            "{{ role }}",
+    allProductNames: JSON.parse('{{ all_product_names | tojson | safe }}'),
+    extraPurchases:  JSON.parse('{{ extra_purchases | tojson | safe }}'),
+    currentMonth:    "{{ month }}",
+    monthUrl:        "{{ '/delivery/history' if role == 'delivery' else '/dairy/sheet' }}"
+};
+
+// Group customers by staff and reorder
+(function() {
+    const byStaff = {};
+    window.INITIAL_CONFIG.customers.forEach(c => {
+        const s = c[16] || "Unassigned";
+        if (!byStaff[s]) byStaff[s] = [];
+        byStaff[s].push(c);
+    });
+    const stNames = Object.keys(byStaff).sort();
+    let sorted = [];
+    stNames.forEach(s => {
+        sorted.push(...byStaff[s]);
+    });
+    window.INITIAL_CONFIG.customers = sorted;
+    window.INITIAL_CONFIG.staffNames = stNames;
+    window.INITIAL_CONFIG.byStaff = byStaff;
+})();
+</script>
+
+<script type="text/babel">
+{% raw %}
+const { useState, useEffect, useRef } = React;
+
+const AttendanceApp = () => {
+    const cfg = window.INITIAL_CONFIG;
+    console.log("DEBUG CUSTOMER structure:", cfg.customers[0], "Length:", cfg.customers[0].length);
+    console.log("DEBUG Billing Type search:", cfg.customers[0].indexOf('current_month'), cfg.customers[0].indexOf('month_end'), cfg.customers[0].indexOf('reservation'));
+    const [attendance, setAttendance]           = useState(cfg.logsMap || {});
+    const [extraPurchases, setExtraPurchases]   = useState(cfg.extraPurchases || {});
+    const [paymentsMap, setPaymentsMap]         = useState(cfg.paymentsMap || {});
+    const [statusState, setStatusState]         = useState("SYNCED");
+    
+    const extraFormRefs  = useRef({});
+    const paymentFormRefs = useRef({});
+
+    // Removed legacy month-picker event handler since it's now handled by React’s onChange event.
+
+    useEffect(() => {
+        const b = document.getElementById('sync-badge');
+        if (!b) return;
+        const states = {
+            'SAVING...': ['sync-saving','fa-sync-alt fa-spin'],
+            'ERROR':     ['sync-error', 'fa-exclamation-triangle'],
+            'SYNCED':    ['sync-synced','fa-check-circle']
+        };
+        const [cls, icon] = states[statusState] || states['SYNCED'];
+        b.className = `sync-badge ${cls}`;
+        b.innerHTML = `<i class="fas ${icon}"></i> ${statusState}`;
+    }, [statusState]);
+
+    const save = (cid, pid, date, val) => {
+        setStatusState("SAVING...");
+        setAttendance(prev => ({ ...prev, [pid]: { ...(prev[pid]||{}), [date]: val } }));
+        fetch('/api/attendance/toggle', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ customer_id:cid, product_id:pid, date, slot:'AM', quantity:val })
+        }).then(r=>r.json()).then(d=>setStatusState(d.success?"SYNCED":"ERROR")).catch(()=>setStatusState("ERROR"));
+    };
+
+    const autoFillDate = (date) => {
+        if (!confirm(`Auto-fill default quantities for all customers on ${date}? This will only fill empty cells.`)) return;
+        setStatusState("SAVING...");
+        fetch('/api/attendance/auto_fill', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ date })
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (res.success) {
+                alert(`Successfully auto-filled ${res.inserted} entries!`);
+                window.location.reload();
+            } else {
+                alert("Error: " + (res.error || "Unknown error"));
+                setStatusState("ERROR");
+            }
+        })
+        .catch(err => {
+            alert("Network error: " + err);
+            setStatusState("ERROR");
+        });
+    };
+
+    const submitExtra = (cid) => {
+        const refs = extraFormRefs.current[cid] || {};
+        const product_name=refs.product?.value, date=refs.date?.value,
+              quantity=refs.qty?.value, rate=refs.rate?.value;
+        if (!product_name || !date || !quantity || !rate) return;
+        setStatusState("SAVING...");
+        fetch('/api/extra_purchase/save', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ customer_id:cid, product_name, date, quantity, rate })
+        }).then(r=>r.json()).then(res => {
+            if (res.success) {
+                const s=String(cid);
+                setExtraPurchases(prev=>({...prev,[s]:[...(prev[s]||[]),res.extra]}));
+                refs.product.value=''; refs.date.value=''; refs.qty.value=''; refs.rate.value='';
+                setStatusState("SYNCED");
+            }
+        }).catch(()=>setStatusState("ERROR"));
+    };
+
+    const deleteExtra = (cid, id) => {
+        if (!id) {
+            alert("Unable to delete this extra purchase because its ID is missing.");
+            setStatusState("ERROR");
+            return;
+        }
+        if (!confirm("Remove this extra purchase?")) return;
+        setStatusState("SAVING...");
+        fetch('/api/extra_purchase/delete', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ id })
+        }).then(r=>r.json()).then(res => {
+            if (res.success) {
+                const s=String(cid);
+                setExtraPurchases(prev=>({...prev,[s]:(prev[s]||[]).filter(e=>e.id!==id)}));
+                setStatusState("SYNCED");
+            } else {
+                alert("Error deleting extra purchase: " + (res.error || "Unknown"));
+                setStatusState("ERROR");
+            }
+        }).catch(err => {
+            alert("Network error: " + err);
+            setStatusState("ERROR");
+        });
+    };
+
+    const savePayment = (cid) => {
+        const refs = paymentFormRefs.current[cid] || {};
+        const p_date = refs.date?.value;
+        const mode   = refs.mode?.value;
+        const amount = refs.amount?.value;
+        if (!p_date || !mode) return;
+
+        setStatusState("SAVING...");
+        fetch('/api/dairy/payment/save', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ customer_id:cid, month:cfg.currentMonth, payment_date:p_date, mode, amount: parseFloat(amount) || 0 })
+        }).then(r=>r.json()).then(res => {
+            if (res.success) {
+                const s=String(cid);
+                setPaymentsMap(prev=>({...prev,[s]:[...(prev[s]||[]),res.payment]}));
+                refs.date.value=''; refs.mode.value='Cash'; if(refs.amount) refs.amount.value='';
+                setStatusState("SYNCED");
+            }
+        }).catch(()=>setStatusState("ERROR"));
+    };
+
+    const deletePayment = (cid, id) => {
+        if (!id) {
+            alert("Unable to delete this payment because its ID is missing. Reload the page and try again.");
+            setStatusState("ERROR");
+            return;
+        }
+        if (!confirm("Remove this payment record?")) return;
+        setStatusState("SAVING...");
+        fetch('/api/dairy/payment/delete', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ id })
+        }).then(r=>r.json()).then(res => {
+            if (res.success) {
+                const s=String(cid);
+                setPaymentsMap(prev=>({...prev,[s]:(prev[s]||[]).filter(p=>p.id!==id)}));
+                setStatusState("SYNCED");
+            } else {
+                alert("Error deleting payment: " + (res.error || "Unknown"));
+                setStatusState("ERROR");
+            }
+        }).catch(err => {
+            alert("Network error: " + err);
+            setStatusState("ERROR");
+        });
+    };
+
+    const handleKey = (e, cIdx, pIdx, dIdx) => {
+        if (!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) return;
+        let nc=cIdx, np=pIdx, nd=dIdx;
+        if      (e.key==='ArrowUp')    { if(np>0) np--; else if(nc>0){nc--;np=(cfg.customers[nc][17]||[]).length-1;} }
+        else if (e.key==='ArrowDown')  { const cp=cfg.customers[nc][17]||[]; if(np<cp.length-1) np++; else if(nc<cfg.customers.length-1){nc++;np=0;} }
+        else if (e.key==='ArrowLeft')  { if(nd>0) nd--; }
+        else if (e.key==='ArrowRight') { if(nd<cfg.days.length-1) nd++; }
+        e.preventDefault();
+        const t=document.getElementById(`qty-${nc}-${np}-${nd}`);
+        if(t){t.focus();t.select();}
+    };
+
+    const dayHdrCls = (d) => {
+        const dow = new Date(d).getDay();
+        if (dow===0) return 'day-sunday';
+        if (dow===6) return 'day-saturday';
+        return 'day-regular';
+    };
+
+    return (
+        <div className="animate-fade-in">
+            <div className="grid-page-header">
+                <div>
+                    <h1 className="grid-page-title"><i className="fas fa-calendar-alt mr-2"></i>Monthly Attendance</h1>
+                    <p style={{color:'var(--text-muted)',fontWeight:600,marginTop:'0.2rem'}}>Records for <strong>{cfg.currentMonth}</strong></p>
+                </div>
+                <div className="grid-controls">
+                    <div className="month-picker-box">
+                        <label>VIEW MONTH</label>
+                        <input 
+                            type="month" 
+                            id="month-input" 
+                            defaultValue={cfg.currentMonth} 
+                            style={{ 
+                                cursor: 'pointer',
+                                border: 'none',
+                                background: 'transparent'
+                            }}
+                            onChange={(e) => {
+                                window.location.href = `${cfg.monthUrl}?month=${e.target.value}`;
+                            }}
+                        />
+                    </div>
+                    <div className="sync-badge sync-synced" id="sync-badge">
+                        <i className="fas fa-check-circle"></i> {statusState}
+                    </div>
+                    <button
+                        onClick={() => autoFillDate(new Date().toISOString().split('T')[0])}
+                        className="btn btn-primary"
+                        style={{borderRadius:'0.75rem',fontWeight:700,background:'linear-gradient(135deg, #10b981, #059669)', border:'none', height: '42px', padding: '0 1.25rem'}}
+                    >
+                        <i className="fas fa-magic mr-1"></i> Auto-fill Today
+                    </button>
+                    <a href="/dairy" className="btn btn-secondary" style={{borderRadius:'0.75rem',fontWeight:700, height: '42px', display: 'inline-flex', alignItems: 'center'}}>
+                        <i className="fas fa-arrow-left mr-1"></i> Back
+                    </a>
+                </div>
+            </div>
+
+            <div className="sheet-wrapper" style={{paddingBottom: '2rem'}}>
+            <table className="ag-table">
+                <thead>
+                    <tr>
+                        <th className="col-name" style={{top:0, zIndex: 95}}>Customer</th>
+                        <th className="col-product" style={{top:0, zIndex: 95}}>Product</th>
+                        {cfg.days.map((d, i) => (
+                            <th key={i} className={dayHdrCls(d)} style={{top:0, zIndex: 90}}>
+                                <div style={{fontSize:'0.55rem',opacity:0.8}}>{new Date(d).toLocaleDateString('en-IN',{weekday:'short'})}</div>
+                                <div style={{fontWeight:900}}>{new Date(d).getDate()}</div>
+                                <button
+                                    title="Auto-fill default quantities for this date"
+                                    onClick={() => autoFillDate(d)}
+                                    style={{background:'none', border:'none', cursor:'pointer', color:'var(--primary)', marginTop:'2px', padding:0}}
+                                >
+                                    <i className="fas fa-magic" style={{fontSize:'0.6rem'}}></i>
+                                </button>
+                            </th>
+                        ))}
+                        <th className="col-total" style={{top:0, zIndex: 90}}>Total</th>
+                        <th className="col-present" style={{top:0, zIndex: 90, color:'#10b981'}}>Present (Days)</th>
+                        <th className="col-absent" style={{top:0, zIndex: 90, color:'#ef4444'}}>Absent (Days)</th>
+                        <th className="col-extra" style={{top:0, zIndex: 90}}>Extra Purchases</th>
+                        <th className="col-pay-date" style={{top:0, zIndex: 90}}>Payment Date</th>
+                        <th className="col-pay-mode" style={{top:0, zIndex: 90}}>Payment Mode</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {cfg.staffNames.map(staffName => {
+                    const staffCustomers = cfg.byStaff[staffName];
+                    const colspan = 6 + cfg.days.length;
+                    return (
+                        <React.Fragment key={staffName}>
+                            <tr>
+                                <td colSpan={colspan} style={{
+                                    background: 'var(--table-th-bg)', color: 'var(--table-th-text)',
+                                    fontWeight: 800, fontSize: '0.95rem', padding: '0.6rem 1rem',
+                                    borderTop: '3px solid var(--primary)', letterSpacing: '0.02em',
+                                    textAlign: 'left'
+                                }}>
+                                    <i className="fas fa-truck mr-2"></i> Staff: {staffName}
+                                </td>
+                            </tr>
+                            {staffCustomers.map((cust, cIdx) => {
+                                const cid = String(cust[0]);
+                                const prods = cust[17] || [];
+                                const extras = (extraPurchases[cid] || []);
+                                const pays = (paymentsMap[cid] || []);
+                                const globalCIdx = cfg.customers.indexOf(cust);
+                                return prods.map((p, pIdx) => {
+                                    const pid = String(p[0]);
+                                    const rawQty = String(p[2]);
+                                    const numericQty = parseFloat(rawQty);
+                                    const atMap = attendance[pid] || {};
+                                    const totalQty = Object.values(atMap).reduce((s, v) => {
+                                        const n = parseFloat(v); return s + (isNaN(n) ? 0 : n);
+                                    }, 0);
+                                    return (
+                                        <tr key={`${cid}-${pid}`} style={{borderBottom:'1px solid var(--border)'}}>
+                                            {pIdx === 0 && (
+                                                <td className="col-name" rowSpan={prods.length} style={{textAlign:'left', verticalAlign:'middle'}}>
+                                                    <div style={{fontWeight:800, fontSize:'0.82rem'}}>
+                                                        {cust[1]} <span style={{color:'var(--text-muted)',fontWeight:500,fontSize:'0.7rem'}}>#{cust[0]}</span>
+                                                    </div>
+                                                    {cust[6] && <div style={{fontSize:'0.65rem',color:'var(--text-muted)',marginTop:'2px'}}><i className="fas fa-truck" style={{marginRight:'3px'}}></i>{cust[6]}</div>}
+                                                </td>
+                                            )}
+                                            <td className="col-product">
+                                                <div style={{display:'flex', alignItems:'center', gap:'5px', flexWrap:'wrap'}}>
+                                                    <div style={{fontWeight:700,fontSize:'0.8rem'}}>{p[1]}</div>
+                                                </div>
+                                                <div style={{marginTop:'4px', marginBottom: '2px'}}>
+                                                    <span style={{color:'#10b981', background:'rgba(16,185,129,0.1)', padding:'2px 6px', borderRadius:'4px', fontSize:'0.7rem', fontWeight:800}}>
+                                                        Qty: {isNaN(numericQty) ? rawQty : numericQty}
+                                                    </span>
+                                                </div>
+                                                <div style={{fontSize:'0.65rem',color:'var(--text-muted)'}}>₹{p[3]}</div>
+                                                {(() => {
+                                                    const bType = cust.find(x => x === 'current_month' || x === 'reservation' || x === 'month_end') || cust[11];
+                                                    let label = '';
+                                                    let bgColor = '';
+                                                    let desc = '';
+                                                    if (bType === 'current_month') { label = 'CM'; bgColor = '#6366f1'; desc = 'Current Month'; }
+                                                    else if (bType === 'reservation') { label = 'R'; bgColor = '#f59e0b'; desc = 'Reservation'; }
+                                                    else if (bType === 'month_end') { label = 'M'; bgColor = '#8b5cf6'; desc = 'Month End'; }
+                                                    
+                                                    if (!label) return null;
+                                                    return (
+                                                        <div style={{marginTop: '3px', display: 'flex', alignItems: 'center', gap: '3px'}}>
+                                                            <span style={{
+                                                                background: bgColor, color: 'white', padding: '1px 3px', 
+                                                                borderRadius: '3px', fontSize: '0.6rem', fontWeight: 900,
+                                                                lineHeight: '1'
+                                                            }} title={desc}>{label}</span>
+                                                            <span style={{fontSize: '0.6rem', fontWeight: 700, color: 'var(--text-muted)'}}>{desc}</span>
+                                                        </div>
+                                                    );
+                                                })()}
+                                            </td>
+                                            {cfg.days.map((dStr, dIdx) => {
+                                                const rawVal = atMap[dStr];
+                                                const q = (rawVal !== undefined && rawVal !== null) ? String(rawVal) : '';
+                                                const n = parseFloat(q);
+                                                const isZero = q !== '' && n === 0;
+                                                const cls = q !== '' && n > 0 ? 'cell-present' : isZero ? 'cell-absent' : '';
+                                                return (
+                                                    <td key={dIdx} className={cls}>
+                                                        <input
+                                                            id={`qty-${globalCIdx}-${pIdx}-${dIdx}`}
+                                                            type="number" step="0.5" value={q}
+                                                            onChange={e=>save(cust[0],p[0],dStr,e.target.value)}
+                                                            onKeyDown={e=>handleKey(e,globalCIdx,pIdx,dIdx)}
+                                                            className="qty-inp"
+                                                            style={{
+                                                                backgroundColor: isZero ? 'rgba(239, 68, 68, 0.15)' : '',
+                                                                color: isZero ? '#ef4444' : '',
+                                                                fontWeight: isZero ? 900 : ''
+                                                            }}
+                                                        />
+                                                    </td>
+                                                );
+                                            })}
+                                            <td className="col-total" style={{color: 'var(--primary)', fontWeight: 800, textAlign: 'center'}}>{totalQty}</td>
+                                            <td className="col-present" style={{color: '#10b981', fontWeight: 800, textAlign: 'center'}}>
+                                                {Object.values(atMap).filter(v => v != null && v !== '' && parseFloat(v) > 0).length}
+                                            </td>
+                                            <td className="col-absent" style={{color: '#ef4444', fontWeight: 800, textAlign: 'center'}}>
+                                                {Object.values(atMap).filter(v => v != null && v !== '' && parseFloat(v) === 0).length}
+                                            </td>
+
+                                            {/* Extra Purchases Column */}
+                                            {pIdx === 0 && (
+                                                <td className="col-extra" rowSpan={prods.length} style={{verticalAlign:'top', padding:'6px'}}>
+                                                    <div style={{marginBottom:'6px'}}>
+                                                        {extras.map((ex, ei) => (
+                                                            <div key={ei} style={{fontSize:'0.72rem', fontWeight:600, marginBottom:'3px', display:'flex', justifyContent:'space-between', gap:'4px', alignItems:'center'}}>
+                                                                <span>{ex.date}: {ex.product_name||ex.product} ({ex.quantity}) @ ₹{ex.rate}</span>
+                                                                <button onClick={()=>deleteExtra(cust[0], ex.id)} style={{background:'none',border:'none',cursor:'pointer',color:'var(--danger)',fontSize:'0.8rem',padding:'0 3px',lineHeight:1}} title="Delete">✕</button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                    <div style={{display:'flex', flexDirection:'column', gap:'3px'}}>
+                                                        <select ref={el=>{ if(!extraFormRefs.current[cust[0]]) extraFormRefs.current[cust[0]]={}; extraFormRefs.current[cust[0]].product=el; }}
+                                                            style={{fontSize:'0.7rem', padding:'2px', background:'var(--sheet-input-bg)', color:'var(--sheet-input-text)', border:'1px solid var(--border)', borderRadius:'4px'}}>
+                                                            <option value="">Product...</option>
+                                                            {(cfg.allProductNames||[]).map(n=>(<option key={n} value={n}>{n}</option>))}
+                                                        </select>
+                                                        <input type="date" ref={el=>{ if(!extraFormRefs.current[cust[0]]) extraFormRefs.current[cust[0]]={}; extraFormRefs.current[cust[0]].date=el; }}
+                                                            style={{fontSize:'0.7rem', padding:'2px', background:'var(--sheet-input-bg)', color:'var(--sheet-input-text)', border:'1px solid var(--border)', borderRadius:'4px'}}/>
+                                                        <div style={{display:'flex', gap:'3px'}}>
+                                                            <input type="number" step="0.5" placeholder="Qty" ref={el=>{ if(!extraFormRefs.current[cust[0]]) extraFormRefs.current[cust[0]]={}; extraFormRefs.current[cust[0]].qty=el; }}
+                                                                style={{width:'50%', fontSize:'0.7rem', padding:'2px', background:'var(--sheet-input-bg)', color:'var(--sheet-input-text)', border:'1px solid var(--border)', borderRadius:'4px'}}/>
+                                                            <input type="number" step="0.5" placeholder="Rate" ref={el=>{ if(!extraFormRefs.current[cust[0]]) extraFormRefs.current[cust[0]]={}; extraFormRefs.current[cust[0]].rate=el; }}
+                                                                style={{width:'50%', fontSize:'0.7rem', padding:'2px', background:'var(--sheet-input-bg)', color:'var(--sheet-input-text)', border:'1px solid var(--border)', borderRadius:'4px'}}/>
+                                                        </div>
+                                                        <button onClick={()=>submitExtra(cust[0])} className="btn-save-pay">+ Add</button>
+                                                    </div>
+                                                </td>
+                                            )}
+
+                                            {/* Payment Columns */}
+                                            {pIdx === 0 && (
+                                                <>
+                                                    <td className="col-pay-date" rowSpan={prods.length} style={{verticalAlign:'top', padding:'6px'}}>
+                                                        {pays.map((pay, pi) => (
+                                                            <div key={pi} className="pay-entry-box" style={{marginBottom:'4px'}}>
+                                                                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                                                                    <span style={{fontSize:'0.72rem', fontWeight:700}}>{pay.payment_date||pay.date}</span>
+                                                                    <button onClick={()=>deletePayment(cust[0], pay.id)} style={{background:'none',border:'none',cursor:'pointer',color:'var(--danger)',fontSize:'0.75rem',padding:'0 2px'}} title="Delete">✕</button>
+                                                                </div>
+                                                                <div style={{fontSize:'0.68rem', color:'var(--text-muted)'}}>₹{pay.amount}</div>
+                                                            </div>
+                                                        ))}
+                                                        <input type="date" className="pay-inp-date"
+                                                            ref={el=>{ if(!paymentFormRefs.current[cust[0]]) paymentFormRefs.current[cust[0]]={}; paymentFormRefs.current[cust[0]].date=el; }}/>
+                                                        <input type="number" placeholder="Amount" className="pay-inp-amt" style={{marginTop:'3px'}}
+                                                            ref={el=>{ if(!paymentFormRefs.current[cust[0]]) paymentFormRefs.current[cust[0]]={}; paymentFormRefs.current[cust[0]].amount=el; }}/>
+                                                    </td>
+                                                    <td className="col-pay-mode" rowSpan={prods.length} style={{verticalAlign:'top', padding:'6px'}}>
+                                                        <select className="pay-inp-mode"
+                                                            ref={el=>{ if(!paymentFormRefs.current[cust[0]]) paymentFormRefs.current[cust[0]]={}; paymentFormRefs.current[cust[0]].mode=el; }}>
+                                                            <option value="Cash">Cash</option>
+                                                            <option value="Online">Online</option>
+                                                            <option value="Cheque">Cheque</option>
+                                                        </select>
+                                                        <button onClick={()=>savePayment(cust[0])} className="btn-save-pay" style={{marginTop:'4px'}}>💾 Save</button>
+                                                    </td>
+                                                </>
+                                            )}
+                                        </tr>
+                                    );
+                                });
+                            })}
+                        </React.Fragment>
+                    );
+                })}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    );
+};
+
+const container = document.getElementById('attendance-root');
+const root = ReactDOM.createRoot(container);
+root.render(<AttendanceApp />);
+{% endraw %}
+</script>
+{% endblock %}

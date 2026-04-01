@@ -1,0 +1,318 @@
+{% extends "base.html" %}
+
+{% block title %}Stock Management{% endblock %}
+
+{% block content %}
+<style>
+    .stock-container {
+        padding: 20px;
+        animation: fadeIn 0.5s ease-out;
+    }
+
+    .stock-grid {
+        display: grid;
+        grid-template-columns: 1fr 2fr;
+        gap: 2rem;
+        align-items: start;
+    }
+
+    .card {
+        background: var(--card-bg);
+        border-radius: 1rem;
+        border: 1px solid var(--border);
+        padding: 1.5rem;
+        box-shadow: var(--shadow-sm);
+        transition: transform 0.3s ease;
+    }
+
+    .form-group {
+        margin-bottom: 1.25rem;
+    }
+
+    .form-group label {
+        display: block;
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: var(--text-muted);
+        margin-bottom: 0.5rem;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 0.75rem;
+        background: var(--input-bg);
+        border: 1px solid var(--border);
+        border-radius: 0.5rem;
+        font-size: 0.95rem;
+        color: var(--text-main);
+        transition: border-color 0.2s;
+    }
+
+    .form-control:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px hsla(var(--primary-h), var(--primary-s), var(--primary-l), 0.1);
+    }
+
+    .btn-stock {
+        background: var(--primary);
+        color: white;
+        font-weight: 700;
+        padding: 0.75rem;
+        border-radius: 0.5rem;
+        border: none;
+        width: 100%;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .btn-stock:hover {
+        background: var(--primary-dark);
+        transform: translateY(-2px);
+    }
+
+    .history-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .history-table th, .history-table td {
+        padding: 1rem;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+        color: var(--text-main);
+    }
+
+    .history-table th {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        color: var(--table-th-text);
+        background: var(--table-th-bg);
+    }
+
+    .qty-badge {
+        background: var(--status-success-bg);
+        color: var(--status-success-text);
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.5rem;
+        font-weight: 700;
+    }
+
+    /* Back Button Style */
+    .btn-back {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        border-radius: 0.75rem;
+        background: var(--surface-solid);
+        color: var(--text-main);
+        text-decoration: none;
+        font-weight: 700;
+        transition: all 0.2s;
+        border: 1px solid var(--border);
+        margin-bottom: 1.5rem;
+    }
+
+    .btn-back:hover {
+        background: var(--background);
+        border-color: var(--primary);
+        transform: translateX(-4px);
+    }
+
+    .header-box {
+        margin-bottom: 2rem;
+        text-align: center;
+    }
+
+    .header-box h1 {
+        font-size: 2.25rem;
+        background: linear-gradient(90deg, var(--primary), var(--accent));
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        margin: 0;
+    }
+</style>
+
+<div id="stock-root"></div>
+{% endblock %}
+
+{% block scripts %}
+<script type="text/babel">
+    const { useState, useEffect } = React;
+
+    const StockApp = () => {
+        const [items, setItems] = useState([]);
+        const [logs, setLogs] = useState([]);
+        const [loading, setLoading] = useState(true);
+        const today = new Date().toISOString().split('T')[0];
+        const [formData, setFormData] = useState({ item_id: '', qty: '', purchase_price: '', supplier: '', notes: '', date: today });
+        const [submitting, setSubmitting] = useState(false);
+
+        useEffect(() => {
+            fetchItems();
+            fetchLogs();
+        }, []);
+
+        const fetchItems = () => {
+            fetch('/api/stock/items')
+                .then(res => res.json())
+                .then(data => setItems(data.items));
+        };
+
+        const fetchLogs = () => {
+            fetch('/api/stock/history')
+                .then(res => res.json())
+                .then(data => {
+                    setLogs(data.logs);
+                    setLoading(false);
+                });
+        };
+
+        const handleSubmit = (e) => {
+            e.preventDefault();
+            setSubmitting(true);
+
+            const form = new FormData();
+            Object.entries(formData).forEach(([key, val]) => form.append(key, val));
+
+            const csrfToken = "{{ csrf_token() }}";
+            fetch('/snacks/stock', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken },
+                body: form
+            })
+            .then(() => {
+                setSubmitting(false);
+                setFormData({ item_id: '', qty: '', purchase_price: '', supplier: '', notes: '' });
+                fetchLogs();
+                fetchItems();
+            });
+        };
+
+        return (
+            <div className="stock-container">
+                <div style={ { marginBottom: '2rem' } }>
+                    <a href="/snacks" className="btn-back">
+                        <i className="fas fa-arrow-left"></i> Back to Menu
+                    </a>
+                </div>
+                <div className="header-box">
+                    <h1>Stock & Inventory Management</h1>
+                    <p style={ { color: 'var(--text-muted)' } }>Record new stock arrivals and track history</p>
+                </div>
+
+                <div className="stock-grid">
+                    <div className="card">
+                        <h3 style={ { marginBottom: '1.5rem', color: 'var(--text-main)' } }><i className="fas fa-truck-loading mr-2" style={ { color: 'var(--primary)' } }></i> Receive Stock</h3>
+                        <form onSubmit={handleSubmit}>
+                            <div className="form-group">
+                                <label>Select Product</label>
+                                <select 
+                                    className="form-control" 
+                                    required 
+                                    value={formData.item_id} 
+                                    onChange={e => setFormData({...formData, item_id: e.target.value})}
+                                >
+                                    <option value="">-- Choose Product --</option>
+                                    {items.map(item => (
+                                        <option key={item[0]} value={item[0]}>{item[1]} (Current Stock: {item[2]})</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div style={ { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' } }>
+                                <div className="form-group">
+                                    <label>Quantity</label>
+                                    <input 
+                                        type="number" 
+                                        className="form-control" 
+                                        required 
+                                        min="1" 
+                                        placeholder="0"
+                                        value={formData.qty}
+                                        onChange={e => setFormData({...formData, qty: e.target.value})}
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label>Cost Price (₹)</label>
+                                    <input 
+                                        type="number" 
+                                        step="0.01" 
+                                        className="form-control" 
+                                        placeholder="Per unit"
+                                        value={formData.purchase_price}
+                                        onChange={e => setFormData({...formData, purchase_price: e.target.value})}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="form-group">
+                                <label>Supplier Name</label>
+                                <input 
+                                    type="text" 
+                                    className="form-control" 
+                                    placeholder="e.g. ABC Snacks"
+                                    value={formData.supplier}
+                                    onChange={e => setFormData({...formData, supplier: e.target.value})}
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label>Notes</label>
+                                <textarea 
+                                    className="form-control" 
+                                    rows="2" 
+                                    placeholder="Batch info, expiry etc..."
+                                    value={formData.notes}
+                                    onChange={e => setFormData({...formData, notes: e.target.value})}
+                                ></textarea>
+                            </div>
+
+                            <button type="submit" className="btn-stock" disabled={submitting}>
+                                {submitting ? <i className="fas fa-spinner fa-spin mr-2"></i> : <i className="fas fa-plus-circle mr-2"></i>}
+                                Update Inventory
+                            </button>
+                        </form>
+                    </div>
+
+                    <div className="card">
+                        <h3 style={ { marginBottom: '1.5rem', color: 'var(--text-main)' } }><i className="fas fa-history mr-2"></i> Recent Stock History</h3>
+                        <div style={ { maxHeight: '600px', overflowY: 'auto' } }>
+                            <table className="history-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Product</th>
+                                        <th>Qty</th>
+                                        <th>Cost</th>
+                                        <th>Supplier</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {logs.map(log => (
+                                        <tr key={log.id}>
+                                            <td style={ { fontSize: '0.8rem' } }>{log.date}</td>
+                                            <td style={ { fontWeight: 700 } }>{log.name}</td>
+                                            <td><span className="qty-badge">+{log.qty}</span></td>
+                                            <td>₹{log.cost.toFixed(2)}</td>
+                                            <td style={ { fontSize: '0.85rem', color: 'var(--text-muted)' } }>{log.supplier || '-'}</td>
+                                        </tr>
+                                    ))}
+                                    {logs.length === 0 && !loading && (
+                                        <tr><td colSpan="5" style={ { textAlign: 'center', padding: '2rem' } } className="text-muted">No history found.</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('stock-root'));
+    root.render(<StockApp />);
+</script>
+{% endblock %}

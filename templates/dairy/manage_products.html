@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Master Products{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 2rem;">
+    <a href="/dairy" class="btn btn-secondary" style="background: white; border: 1px solid #e2e8f0; color: #475569; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; font-weight: 700; padding: 0.5rem 1rem; border-radius: 0.75rem;">
+        <i class="fas fa-arrow-left"></i> Back to Dairy Menu
+    </a>
+</div>
+
+<div class="grid-2">
+    <!-- Add/Edit Product -->
+    <div class="card">
+        <h2 id="form-title"><i class="fas fa-box-open"></i> Add Master Product</h2>
+        <form method="POST" id="product-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" id="form-action" value="add">
+            <input type="hidden" name="product_id" id="product_id">
+
+            <div class="form-group">
+                <label>Product Name</label>
+                <input type="text" name="name" id="name" required placeholder="e.g. Milk (Cow), Paneer (500g)">
+            </div>
+            
+            <div class="form-group">
+                <label>Default Price (₹)</label>
+                <input type="number" step="0.5" name="default_price" id="default_price" required value="50.0">
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block" id="submit-btn" style="margin-top: 10px;">Save Product</button>
+            <button type="button" class="btn btn-secondary btn-block" id="cancel-btn" style="display:none;" onclick="resetForm()">Cancel Edit</button>
+        </form>
+    </div>
+
+    <!-- Master Products List -->
+    <div class="card" style="max-height: 85vh; overflow-y: auto;">
+        <h2><i class="fas fa-list"></i> Product List</h2>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Product Name</th>
+                        <th>Default Price</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in products %}
+                    <tr>
+                        <td style="font-weight: bold; color: var(--primary);">{{ p[0] }}</td>
+                        <td><strong>{{ p[1] }}</strong></td>
+                        <td>₹{{ "{:,.2f}".format(p[2]) }}</td>
+                        <td>
+                            <button onclick='editProduct({{ p | tojson }})' class="btn btn-sm btn-info" style="margin-right: 5px;">
+                                <i class="fas fa-edit"></i> Edit
+                            </button>
+                            <form method="POST" style="display:inline;" onsubmit="return confirm('Delete this product? It will no longer appear in the dropdown for new additions.');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="action" value="delete">
+                                <input type="hidden" name="product_id" value="{{ p[0] }}">
+                                <button type="submit" class="btn btn-sm btn-danger">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="text-center">No master products found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="text-center mt-4">
+    <a href="/dairy" class="btn btn-secondary">Back to Dairy Menu</a>
+</div>
+
+<script>
+    function editProduct(product) {
+        document.getElementById('form-title').innerHTML = '<i class="fas fa-edit"></i> Edit Product';
+        document.getElementById('form-action').value = 'edit';
+        document.getElementById('product_id').value = product[0];
+        document.getElementById('submit-btn').innerText = 'Update Product';
+        document.getElementById('cancel-btn').style.display = 'block';
+
+        document.getElementById('name').value = product[1];
+        document.getElementById('default_price').value = product[2];
+
+        // Scroll to top
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function resetForm() {
+        document.getElementById('product-form').reset();
+        
+        document.getElementById('form-title').innerHTML = '<i class="fas fa-box-open"></i> Add Master Product';
+        document.getElementById('form-action').value = 'add';
+        document.getElementById('product_id').value = '';
+        document.getElementById('submit-btn').innerText = 'Save Product';
+        document.getElementById('cancel-btn').style.display = 'none';
+        
+        document.getElementById('default_price').value = '50.0';
+    }
+</script>
+{% endblock %}

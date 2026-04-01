@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}Dairy Billing{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;">
+        <div>
+            <h1><i class="fas fa-file-invoice"></i> Monthly Billing</h1>
+            <p class="text-muted">Generate and Print Bills</p>
+        </div>
+        <div style="display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;">
+            <form method="GET" style="display: flex; flex-direction: column; gap: 5px;">
+                <label style="font-size: 0.9em; color: var(--text-muted);">View Month:</label>
+                <input type="month" name="month" value="{{ month_str }}" onchange="this.form.submit()" class="form-control" style="width: auto;">
+            </form>
+            <div style="display: flex; flex-direction: column; gap: 5px;">
+                <label style="font-size: 0.9em; color: var(--text-muted);">Bill Closing Date:</label>
+                <input type="date" id="generation-date-input" class="form-control" style="width: auto;" required>
+            </div>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Customer Name</th>
+                    <th>Total Packets</th>
+                    <th>Bill Amount</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in billing_data %}
+                <tr>
+                    <td>{{ row[1] }}</td> <!-- Name -->
+                    <td>{{ "{:,.2f}".format(row[2]) }}</td> <!-- Liters -->
+                    <td style="font-weight: bold;" id="bill-amount-{{ row[0] }}">
+                        {% if row[3] is not none and row[4] %}
+                            <span style="color: var(--success);">₹{{ "{:,.2f}".format(row[3]) }}</span><br>
+                            <small class="text-muted" style="font-weight: normal; font-size: 0.75em;">Done: {{ row[4] }}</small>
+                        {% else %}
+                            <span class="text-muted">Not Ready</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div style="display: flex; gap: 8px;">
+                            <button onclick="generateBill(this)" class="btn btn-sm btn-primary"
+                                data-id="{{ row[0] }}" data-month="{{ month_str }}" id="bill-btn-{{ row[0] }}">
+                                <i class="fas fa-calculator"></i> Calculate
+                            </button>
+                            
+                            <a href="{% if row[4] and row[5] %}/static/bills/{{ row[5] }}{% else %}#{% endif %}" 
+                               class="btn btn-sm btn-success" 
+                               id="print-btn-{{ row[0] }}"
+                               target="_blank"
+                               {% if not (row[4] and row[5]) %}style="display: none;"{% endif %}>
+                                <i class="fas fa-print"></i> Print
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4" class="text-center">No data for this month.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const genDateInput = document.getElementById('generation-date-input');
+        if(!genDateInput.value) {
+            genDateInput.value = new Date().toISOString().split('T')[0];
+        }
+    });
+
+    function generateBill(btn) {
+        const custId = btn.dataset.id;
+        const month = document.getElementsByName('month')[0].value;
+        const genDate = document.getElementById('generation-date-input').value;
+
+        if (!genDate) {
+            alert('Please select a generation date for the bill first.');
+            return;
+        }
+
+        const originalHTML = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+        fetch(`/dairy/generate_bill/${custId}?month=${month}&generation_date=${genDate}`, { 
+            method: 'POST',
+            headers: { 'X-CSRFToken': '{{ csrf_token() }}' }
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    // Update exact row amounts without refresh
+                    const amountCell = document.getElementById(`bill-amount-${custId}`);
+                    if(amountCell) {
+                        amountCell.innerHTML = `<span style="color: var(--success);">₹${data.bill_amount.toFixed(2)}</span><br>
+                                                <small class="text-muted" style="font-weight: normal; font-size: 0.75em;">Gen: Today</small>`;
+                    }
+
+                    // Show Print button 
+                    const printBtn = document.getElementById(`print-btn-${custId}`);
+                    if (printBtn) {
+                        printBtn.style.display = 'inline-flex';
+                        printBtn.href = data.pdf_url;
+                    }
+                    
+                    btn.innerHTML = '<i class="fas fa-check"></i> OK';
+                    btn.classList.replace('btn-primary', 'btn-secondary');
+                    
+                    setTimeout(() => {
+                        btn.innerHTML = '<i class="fas fa-calculator"></i> Calculate';
+                        btn.classList.replace('btn-secondary', 'btn-primary');
+                        btn.disabled = false;
+                    }, 3000);
+                } else {
+                    alert('Error: ' + (data.message || 'Could not generate bill'));
+                    btn.innerHTML = originalHTML;
+                    btn.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Network error while calculating the bill.');
+                btn.innerHTML = originalHTML;
+                btn.disabled = false;
+            });
+    }
+</script>
+{% endblock %}
