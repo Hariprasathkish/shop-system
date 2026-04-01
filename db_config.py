@@ -12,9 +12,13 @@ if DATABASE_URL:
         "user": result.username,
         "password": result.password,
         "host": result.hostname,
-        "port": result.port or 5432,
-        "sslmode": "require"   # Required for hosted/cloud PostgreSQL
+        "port": result.port or 5432
     }
+    
+    # Render internal database hostnames (starting with 'dpg-') do NOT support SSL.
+    # Other remote databases (like Neon/Supabase) require it.
+    if result.hostname and not result.hostname.startswith("dpg-"):
+        DB_CONFIG["sslmode"] = "require"
 else:
     # Local development fallback
     DB_CONFIG = {
