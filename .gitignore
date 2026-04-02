@@ -43,6 +43,7 @@ create_zip.py
 
 # Output / report files
 *.txt
+!requirements.txt
 *.csv
 *.zip
 reports/
