@@ -345,7 +345,19 @@ const AttendanceApp = () => {
         fetch('/api/attendance/toggle', {
             method: 'POST', headers: {'Content-Type':'application/json'},
             body: JSON.stringify({ customer_id:cid, product_id:pid, date, slot:'AM', quantity:val })
-        }).then(r=>r.json()).then(d=>setStatusState(d.success?"SYNCED":"ERROR")).catch(()=>setStatusState("ERROR"));
+        }).then(r=>r.json()).then(d=>{
+            if (d.success) {
+                setStatusState("SYNCED");
+            } else {
+                console.error("Sync Error:", d.error);
+                setStatusState("ERROR");
+                alert("Sync Failed: " + (d.error || "Unknown server error"));
+            }
+        }).catch(err=>{
+            console.error("Network Error:", err);
+            setStatusState("ERROR");
+            alert("Network Error: Could not connect to server.");
+        });
     };
 
     const autoFillDate = (date) => {

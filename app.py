@@ -423,13 +423,8 @@ def init_db():
 # ------------------ HOME / LOGIN ------------------
 @app.route("/")
 def home():
-    if "role" in session:
-        if session["role"] == "admin":
-            return redirect("/admin")
-        elif session["role"] == "customer":
-            return redirect("/customer")
-        elif session["role"] == "delivery":
-            return redirect("/delivery/dashboard")
+    # Force authentication page by default, even if session exists
+    # If the user wants to go to dashboard, they can click a link or we can add a 'Continue' button on login
     return render_template("login.html", hide_menu=True)
 
 @app.route("/login", methods=["POST"])
@@ -2776,57 +2771,63 @@ def toggle_attendance():
     if session.get("role") not in ["admin", "delivery"]:
         return jsonify({"success": False, "error": "Unauthorized"}), 403
     
-    data = request.get_json()
-    customer_id = data.get("customer_id")
-    product_id = data.get("product_id")
-    date = data.get("date")
-    slot = data.get("slot")
-    quantity = data.get("quantity")
-    
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
-    # Check if log exists (using product_id is simpler and more accurate now)
-    if product_id:
-        cur.execute("SELECT id FROM dairy_logs WHERE product_id=%s AND date=%s", (product_id, date))
-    else:
-        # Fallback for legacy or if product_id missing (shouldn't happen with new UI)
-        cur.execute("SELECT id FROM dairy_logs WHERE customer_id=%s AND date=%s AND time_slot=%s", (customer_id, date, slot))
+    conn = None
+    try:
+        data = request.get_json()
+        raw_cid = data.get("customer_id")
+        raw_pid = data.get("product_id")
+        date = data.get("date")
+        slot = data.get("slot", "AM")
+        quantity = data.get("quantity")
         
-    existing = cur.fetchone()
-    
-    if quantity is not None and quantity != '':
-        qty_val = float(quantity)
-        if qty_val > 0:
-            if existing:
-                cur.execute("UPDATE dairy_logs SET quantity=%s WHERE id=%s", (qty_val, existing[0]))
-            else:
-                cur.execute("INSERT INTO dairy_logs (customer_id, product_id, date, time_slot, quantity) VALUES (%s, %s, %s, %s, %s)",
-                           (customer_id, product_id, date, slot, qty_val))
-            status = "Present"
-        elif qty_val == 0:
-            # Store 0 as explicit absent
-            if existing:
-                cur.execute("UPDATE dairy_logs SET quantity=0 WHERE id=%s", (existing[0],))
-            else:
-                cur.execute("INSERT INTO dairy_logs (customer_id, product_id, date, time_slot, quantity) VALUES (%s, %s, %s, %s, 0)",
-                           (customer_id, product_id, date, slot))
-            status = "Absent"
+        # Explicit type casting for PostgreSQL compatibility
+        customer_id = int(raw_cid) if raw_cid else None
+        product_id = int(raw_pid) if raw_pid else None
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Check if log exists
+        if product_id:
+            cur.execute("SELECT id FROM dairy_logs WHERE product_id=%s AND date=%s", (product_id, date))
         else:
-            # Negative or invalid - delete
+            cur.execute("SELECT id FROM dairy_logs WHERE customer_id=%s AND date=%s AND time_slot=%s", (customer_id, date, slot))
+            
+        existing = cur.fetchone()
+        
+        if quantity is not None and quantity != '':
+            qty_val = float(quantity)
+            if qty_val > 0:
+                if existing:
+                    cur.execute("UPDATE dairy_logs SET quantity=%s WHERE id=%s", (qty_val, existing[0]))
+                else:
+                    cur.execute("INSERT INTO dairy_logs (customer_id, product_id, date, time_slot, quantity) VALUES (%s, %s, %s, %s, %s)",
+                               (customer_id, product_id, date, slot, qty_val))
+                status = "Present"
+            elif qty_val == 0:
+                if existing:
+                    cur.execute("UPDATE dairy_logs SET quantity=0 WHERE id=%s", (existing[0],))
+                else:
+                    cur.execute("INSERT INTO dairy_logs (customer_id, product_id, date, time_slot, quantity) VALUES (%s, %s, %s, %s, 0)",
+                               (customer_id, product_id, date, slot))
+                status = "Absent"
+            else:
+                if existing:
+                    cur.execute("DELETE FROM dairy_logs WHERE id=%s", (existing[0],))
+                status = "Cleared"
+        else:
             if existing:
                 cur.execute("DELETE FROM dairy_logs WHERE id=%s", (existing[0],))
             status = "Cleared"
-    else:
-        # Empty quantity - delete the log
-        if existing:
-            cur.execute("DELETE FROM dairy_logs WHERE id=%s", (existing[0],))
-        status = "Cleared"
-    
-    conn.commit()
-    conn.close()
-    
-    return jsonify({"success": True, "status": status})
+        
+        conn.commit()
+        return jsonify({"success": True, "status": status})
+    except Exception as e:
+        if conn: conn.rollback()
+        print(f"[ERROR] toggle_attendance: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        if conn: conn.close()
 
 @app.route("/api/attendance/auto_fill", methods=["POST"])
 def api_auto_fill():
@@ -2834,28 +2835,37 @@ def api_auto_fill():
     if session.get("role") not in ["admin", "delivery"]:
         return jsonify({"success": False, "error": "Unauthorized"}), 403
     
-    data = request.get_json() or {}
-    date = data.get("date") or datetime.date.today().isoformat()
-    
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
-    # Fetch all default products for all customers
-    cur.execute("SELECT customer_id, id, default_qty FROM customer_products")
-    products = cur.fetchall()
-    
-    count = 0
-    for cid, pid, dqty in products:
-        # Check if already exists for this date (AM slot)
-        cur.execute("SELECT id FROM dairy_logs WHERE product_id=%s AND date=%s", (pid, date))
-        if not cur.fetchone() and dqty > 0:
-            cur.execute("INSERT INTO dairy_logs (customer_id, product_id, date, time_slot, quantity) VALUES (%s, %s, %s, 'AM', %s)",
-                       (cid, pid, date, dqty))
-            count += 1
+    conn = None
+    try:
+        data = request.get_json() or {}
+        date = data.get("date") or datetime.date.today().isoformat()
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Fetch all default products for all customers
+        cur.execute("SELECT customer_id, id, default_qty FROM customer_products")
+        products = cur.fetchall()
+        
+        count = 0
+        for cid, pid, dqty in products:
+            if not dqty or dqty <= 0: continue
             
-    conn.commit()
-    conn.close()
-    return jsonify({"success": True, "inserted": count, "date": date})
+            # Check if already exists for this date (AM slot)
+            cur.execute("SELECT id FROM dairy_logs WHERE product_id=%s AND date=%s", (pid, date))
+            if not cur.fetchone():
+                cur.execute("INSERT INTO dairy_logs (customer_id, product_id, date, time_slot, quantity) VALUES (%s, %s, %s, 'AM', %s)",
+                           (cid, pid, date, dqty))
+                count += 1
+                
+        conn.commit()
+        return jsonify({"success": True, "inserted": count, "date": date})
+    except Exception as e:
+        if conn: conn.rollback()
+        print(f"[ERROR] api_auto_fill: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        if conn: conn.close()
 
 @app.route("/api/attendance/extra", methods=["POST"])
 def save_extra_note():
