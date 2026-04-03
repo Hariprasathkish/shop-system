@@ -295,12 +295,12 @@
                                     {% if cust.last_gen_in_month %}<i class="fas fa-check"></i> Calculated{% else %}<i class="fas fa-calculator"></i> Calculate{% endif %}
                                 </button>
                                 {% if cust.last_gen_in_month %}
-                                <button onclick="resetBilling({{ cust.id }})" class="btn btn-sm btn-danger" title="Remove Calculated Bill">
+                                <button onclick="resetBilling('{{ cust.id }}')" class="btn btn-sm btn-danger" title="Remove Calculated Bill">
                                     <i class="fas fa-trash-alt"></i> Remove
                                 </button>
                                 {% endif %}
                                 {% if cust.balance > 0 %}
-                                <button onclick="markAsPaid({{ cust.id }}, {{ cust.balance }}, '{{ month_str }}')" class="btn btn-sm btn-info"
+                                <button onclick="markAsPaid('{{ cust.id }}', '{{ cust.balance }}', '{{ month_str }}')" class="btn btn-sm btn-info"
                                     title="Mark as Paid">
                                     <i class="fas fa-check-circle"></i> Paid
                                 </button>

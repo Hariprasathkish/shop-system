@@ -89,7 +89,7 @@
                         <td style="font-size: 0.8rem; color: var(--text-muted);">{{ bill[1][5:16] }}</td>
                         <td style="color: var(--text-main);">{{ bill[3] }}</td>
                         <td style="text-align:right; font-size: 0.75rem;">
-                            <span class="badge" style="background:{% if bill[2]=='retail' %}var(--status-info-bg){% else %}var(--status-success-bg){% endif %}; color:{% if bill[2]=='retail' %}var(--status-info-text){% else %}var(--status-success-text){% endif %};">
+                            <span class="badge" {{ 'style="background: var(--status-info-bg); color: var(--status-info-text);"'|safe if bill[2]=='retail' else 'style="background: var(--status-success-bg); color: var(--status-success-text);"'|safe }}>
                                 {{ bill[2] }}
                             </span>
                         </td>
@@ -147,7 +147,7 @@
                     <span style="color: var(--text-main);">₹{{ "%.2f"|format(mode[2]) }}</span>
                 </div>
                 <div style="height: 8px; background: var(--background); border-radius: 4px; overflow: hidden; border: 1px solid var(--border);">
-                    <div style="height: 100%; width: {{ (mode[2] / total_revenue * 100) if total_revenue > 0 else 0 }}%; background: {% if mode[0]=='retail' %}var(--accent){% else %}var(--primary){% endif %};"></div>
+                    <div {{ ('style="height: 100%; width: ' ~ ((mode[2] / total_revenue * 100) if total_revenue > 0 else 0) ~ '%; background: ' ~ ('var(--accent)' if mode[0]=='retail' else 'var(--primary)') ~ ';"')|safe }}></div>
                 </div>
                 <small style="color: var(--text-muted);">{{ mode[1] }} bills issued</small>
             </div>
@@ -162,7 +162,7 @@
                     <span style="color: var(--text-main);">₹{{ "%.2f"|format(cash_total) }}</span>
                 </div>
                 <div style="height: 8px; background: var(--background); border-radius: 4px; overflow: hidden; border: 1px solid var(--border);">
-                    <div style="height: 100%; width: {{ (cash_total / total_revenue * 100) if total_revenue > 0 else 0 }}%; background: var(--success);"></div>
+                    <div {{ ('style="height: 100%; width: ' ~ ((cash_total / total_revenue * 100) if total_revenue > 0 else 0) ~ '%; background: var(--success);"')|safe }}></div>
                 </div>
             </div>
             <div style="margin-bottom: 1rem;">
@@ -171,7 +171,7 @@
                     <span style="color: var(--text-main);">₹{{ "%.2f"|format(online_total) }}</span>
                 </div>
                 <div style="height: 8px; background: var(--background); border-radius: 4px; overflow: hidden; border: 1px solid var(--border);">
-                    <div style="height: 100%; width: {{ (online_total / total_revenue * 100) if total_revenue > 0 else 0 }}%; background: var(--primary);"></div>
+                    <div {{ ('style="height: 100%; width: ' ~ ((online_total / total_revenue * 100) if total_revenue > 0 else 0) ~ '%; background: var(--primary);"')|safe }}></div>
                 </div>
             </div>
         </div>

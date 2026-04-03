@@ -206,7 +206,7 @@ def init_db():
     except Exception as e:
         print("Error ensuring default staff:", e)
 
-    # 2. dairy_customers (depends on delivery_staff)
+    # 2. dairy_customers
     cur.execute("""
     CREATE TABLE IF NOT EXISTS dairy_customers (
         id SERIAL PRIMARY KEY,
@@ -221,14 +221,32 @@ def init_db():
         password TEXT DEFAULT '1234',
         delivery_order INTEGER DEFAULT 9999,
         billing_type TEXT DEFAULT 'current_month',
-        last_bill_date TEXT,
+        last_bill_date DATE,
         last_bill_generated_on TEXT,
+        last_bill_amount REAL DEFAULT 0.0,
         net_payable REAL DEFAULT 0.0,
         email TEXT,
         custom_id TEXT,
         FOREIGN KEY(delivery_staff_id) REFERENCES delivery_staff(id)
     )
     """)
+    # Migration/Updates for dairy_customers
+    # We use separate try blocks for each to ensure one failure doesn't block others
+    for cmd in [
+        "ALTER TABLE dairy_customers ADD COLUMN IF NOT EXISTS last_bill_amount REAL DEFAULT 0.0",
+        "ALTER TABLE dairy_customers ADD COLUMN IF NOT EXISTS last_bill_generated_on TEXT",
+        "ALTER TABLE dairy_customers ADD COLUMN IF NOT EXISTS net_payable REAL DEFAULT 0.0",
+        "ALTER TABLE dairy_customers ADD COLUMN IF NOT EXISTS last_bill_date DATE",
+        "ALTER TABLE dairy_customers ADD COLUMN IF NOT EXISTS email TEXT",
+        "ALTER TABLE dairy_customers ADD COLUMN IF NOT EXISTS custom_id TEXT",
+        "ALTER TABLE dairy_customers ALTER COLUMN last_bill_date TYPE DATE USING (NULLIF(last_bill_date, '')::DATE)"
+    ]:
+        try:
+            cur.execute(cmd)
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            print(f"DEBUG: Migration dairy_customers command failed: {cmd} | Error: {e}")
 
     # 3. customer_products (depends on dairy_customers)
     cur.execute("""
@@ -243,7 +261,7 @@ def init_db():
     )
     """)
 
-    # 4. dairy_logs (depends on dairy_customers and customer_products)
+    # 4. dairy_logs
     cur.execute("""
     CREATE TABLE IF NOT EXISTS dairy_logs (
         id SERIAL PRIMARY KEY,
@@ -256,8 +274,14 @@ def init_db():
         FOREIGN KEY(product_id) REFERENCES customer_products(id)
     )
     """)
-
-    # 5. attendance_requests (depends on dairy_customers and delivery_staff)
+    try:
+        # Cast date to DATE if it was TEXT
+        cur.execute("ALTER TABLE dairy_logs ALTER COLUMN date TYPE DATE USING (date::DATE)")
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"DEBUG: Migration dairy_logs date cast failed: {e}")
+    # 5. attendance_requests
     cur.execute("""
     CREATE TABLE IF NOT EXISTS attendance_requests (
         id SERIAL PRIMARY KEY,
@@ -267,6 +291,7 @@ def init_db():
         new_date DATE,
         new_time_slot TEXT,
         new_quantity REAL,
+        product_name TEXT,
         reason TEXT,
         status TEXT DEFAULT 'Pending',
         admin_response TEXT,
@@ -275,6 +300,63 @@ def init_db():
         FOREIGN KEY(staff_id) REFERENCES delivery_staff(id)
     )
     """)
+    # Migration for attendance_requests
+    for cmd in [
+        "ALTER TABLE attendance_requests ADD COLUMN IF NOT EXISTS product_name TEXT",
+        "ALTER TABLE attendance_requests ADD COLUMN IF NOT EXISTS staff_id INTEGER",
+        "ALTER TABLE attendance_requests ADD COLUMN IF NOT EXISTS admin_response TEXT",
+        "ALTER TABLE attendance_requests ADD COLUMN IF NOT EXISTS log_id INTEGER",
+        "ALTER TABLE attendance_requests ADD COLUMN IF NOT EXISTS new_date DATE",
+        "ALTER TABLE attendance_requests ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
+        "ALTER TABLE attendance_requests ALTER COLUMN new_date TYPE DATE USING (NULLIF(new_date, '')::DATE)",
+        "ALTER TABLE attendance_requests ALTER COLUMN created_at TYPE TIMESTAMP USING (created_at::TIMESTAMP)"
+    ]:
+        try:
+            cur.execute(cmd)
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            print(f"DEBUG: Migration attendance_requests command failed: {cmd} | Error: {e}")
+
+
+    # 6.5 extra_purchases
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS dairy_extra_purchases (
+        id SERIAL PRIMARY KEY,
+        customer_id INTEGER,
+        date DATE DEFAULT CURRENT_DATE,
+        product_name TEXT,
+        quantity REAL,
+        rate REAL,
+        amount REAL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(customer_id) REFERENCES dairy_customers(id)
+    )
+    """)
+    try:
+        cur.execute("ALTER TABLE dairy_extra_purchases ALTER COLUMN date TYPE DATE USING (date::DATE)")
+    except: pass
+    conn.commit()
+
+    # 7. Legacy Data Migration for customer_products
+    try:
+        # If a customer has NO entries in customer_products, take their legacy data from dairy_customers
+        cur.execute("""
+            INSERT INTO customer_products (customer_id, product_name, default_qty, price)
+            SELECT id, product_name, default_qty, price_per_liter 
+            FROM dairy_customers 
+            WHERE id NOT IN (SELECT DISTINCT customer_id FROM customer_products)
+        """)
+        
+        # Update dairy_logs where product_id is NULL to point to the first product_id for that customer
+        cur.execute("""
+            UPDATE dairy_logs l
+            SET product_id = (SELECT MIN(id) FROM customer_products p WHERE p.customer_id = l.customer_id)
+            WHERE l.product_id IS NULL AND EXISTS (SELECT 1 FROM customer_products p WHERE p.customer_id = l.customer_id)
+        """)
+        conn.commit()
+    except Exception as e:
+        print(f"DEBUG: Migration product_id sync error: {e}")
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS dairy_extra_notes (
@@ -297,19 +379,11 @@ def init_db():
         FOREIGN KEY(customer_id) REFERENCES dairy_customers(id)
     )
     """)
+    try:
+        cur.execute("ALTER TABLE dairy_payments ALTER COLUMN payment_date TYPE DATE USING (payment_date::DATE)")
+    except: pass
+    conn.commit()
 
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS dairy_extra_purchases (
-        id SERIAL PRIMARY KEY,
-        customer_id INTEGER,
-        date DATE,
-        product_name TEXT,
-        quantity REAL,
-        rate REAL,
-        amount REAL,
-        FOREIGN KEY(customer_id) REFERENCES dairy_customers(id)
-    )
-    """)
 
 
     cur.execute("""
@@ -336,6 +410,10 @@ def init_db():
         FOREIGN KEY(staff_id) REFERENCES delivery_staff(id)
     )
     """)
+    try:
+        cur.execute("ALTER TABLE staff_payroll ALTER COLUMN payment_date TYPE DATE USING (payment_date::DATE)")
+    except: pass
+    conn.commit()
 
     conn.commit()
     conn.close()
@@ -683,11 +761,11 @@ def api_snacks_products():
             image_url = f"/static/uploads/snacks/{filename}"
         
         cur.execute(
-            "INSERT INTO snacks_menu (name, price, purchase_price, retail_price, wholesale_price, stock, image_url) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            "INSERT INTO snacks_menu (name, price, purchase_price, retail_price, wholesale_price, stock, image_url) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
             (name, retail_price, purchase_price, retail_price, wholesale_price, stock, image_url)
         )
+        new_id = cur.fetchone()[0]
         conn.commit()
-        new_id = cur.lastrowid
         conn.close()
         return jsonify({"success": True, "id": new_id, "image_url": image_url})
 
@@ -1328,7 +1406,7 @@ def dairy_customer_view():
     return render_template("dairy/dairy_customer.html", logs=my_logs, requests=my_requests, master_products=master_products)
 
 @app.route("/dairy/accounts")
-def dairy_accounts():
+def dairy_accounts_overview():
     if session.get("role") != "admin":
         return redirect("/")
     
@@ -2136,22 +2214,31 @@ def submit_request():
     customer_id = session.get("customer_id")
     # Handle optional fields for general requests
     new_date = request.form.get("new_date")
-    new_slot = request.form.get("new_slot", "AM") # Default to AM as requested
+    if not new_date: new_date = None # PostgreSQL requires NULL for empty dates
+    
+    new_slot = request.form.get("new_slot", "AM")
     new_qty = request.form.get("new_qty")
+    if not new_qty: new_qty = 0 # Handle empty quantity
+    
     product_name = request.form.get("product_name")
     reason = request.form.get("reason", "No reason provided")
 
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("""
-        INSERT INTO attendance_requests (customer_id, new_date, new_time_slot, new_quantity, product_name, reason)
-        VALUES (%s, %s, %s, %s, %s, %s)
-    """, (customer_id, new_date, new_slot, new_qty, product_name, reason))
-    conn.commit()
-    conn.close()
+    try:
+        cur.execute("""
+            INSERT INTO attendance_requests (customer_id, new_date, new_time_slot, new_quantity, product_name, reason)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (customer_id, new_date, new_slot, new_qty, product_name, reason))
+        conn.commit()
+        flash("Success! Your request has been submitted.")
+    except Exception as e:
+        print(f"DEBUG: Error submitting request: {e}")
+        conn.rollback()
+        flash("An error occurred while submitting your request. Please try again.")
+    finally:
+        conn.close()
     
-    flash("Success! Your request has been submitted.")
-    # Redirect back to where they came from or dashboard
     return redirect(request.referrer or "/customer")
 
 @app.route("/dairy/requests")
@@ -2167,10 +2254,9 @@ def view_requests():
     conn.commit()
 
     cur.execute("""
-        SELECT r.id, COALESCE(c.name, s.name, 'Unknown'), r.new_date, r.new_time_slot, r.new_quantity, r.reason, r.status, r.customer_id, r.admin_response, r.product_name
+        SELECT r.id, COALESCE(c.name, 'Admin/Staff'), r.new_date, r.new_time_slot, r.new_quantity, r.reason, r.status, r.customer_id, r.admin_response, r.product_name
         FROM attendance_requests r
         LEFT JOIN dairy_customers c ON r.customer_id = c.id
-        LEFT JOIN delivery_staff s ON r.staff_id = s.id
         ORDER BY r.id DESC
     """)
     all_requests = cur.fetchall()
@@ -2196,30 +2282,36 @@ def action_request():
     conn = get_db_connection()
     cur = conn.cursor()
     
-    if action == "approve":
-        cur.execute("SELECT customer_id, new_date, new_time_slot, new_quantity, product_name FROM attendance_requests WHERE id=%s", (req_id,))
-        req = cur.fetchone()
-        if req:
-            cid, date, slot, qty, prod_name = req
-            if date and slot and qty is not None:
-                # Find matching product_id for this customer
-                cur.execute("SELECT id FROM customer_products WHERE customer_id=%s AND product_name=%s", (cid, prod_name))
-                p_row = cur.fetchone()
-                pid = p_row[0] if p_row else None
-                
-                if pid:
-                    cur.execute("SELECT id FROM dairy_logs WHERE customer_id=%s AND date=%s AND time_slot=%s AND product_id=%s", (cid, date, slot, pid))
-                    existing = cur.fetchone()
-                    if existing:
-                        cur.execute("UPDATE dairy_logs SET quantity=%s WHERE id=%s", (qty, existing[0]))
-                    else:
-                        cur.execute("INSERT INTO dairy_logs (customer_id, date, time_slot, quantity, product_id) VALUES (%s, %s, %s, %s, %s)", (cid, date, slot, qty, pid))
-        cur.execute("UPDATE attendance_requests SET status='Approved', admin_response=%s WHERE id=%s", (response, req_id))
-    else:
-        cur.execute("UPDATE attendance_requests SET status='Rejected', admin_response=%s WHERE id=%s", (response, req_id))
-        
-    conn.commit()
-    conn.close()
+    try:
+        if action == "approve":
+            cur.execute("SELECT customer_id, new_date, new_time_slot, new_quantity, product_name FROM attendance_requests WHERE id=%s", (req_id,))
+            req = cur.fetchone()
+            if req:
+                cid, date, slot, qty, prod_name = req
+                # PostgreSQL safe check: only update logs if we have date/qty
+                if date and slot and qty is not None:
+                    # Find matching product_id for this customer
+                    cur.execute("SELECT id FROM customer_products WHERE customer_id=%s AND product_name=%s", (cid, prod_name))
+                    p_row = cur.fetchone()
+                    pid = p_row[0] if p_row else None
+                    
+                    if pid:
+                        cur.execute("SELECT id FROM dairy_logs WHERE customer_id=%s AND date=%s AND time_slot=%s AND product_id=%s", (cid, date, slot, pid))
+                        existing = cur.fetchone()
+                        if existing:
+                            cur.execute("UPDATE dairy_logs SET quantity=%s WHERE id=%s", (qty, existing[0]))
+                        else:
+                            cur.execute("INSERT INTO dairy_logs (customer_id, date, time_slot, quantity, product_id) VALUES (%s, %s, %s, %s, %s)", (cid, date, slot, qty, pid))
+            cur.execute("UPDATE attendance_requests SET status='Approved', admin_response=%s WHERE id=%s", (response, req_id))
+        else:
+            cur.execute("UPDATE attendance_requests SET status='Rejected', admin_response=%s WHERE id=%s", (response, req_id))
+            
+        conn.commit()
+    except Exception as e:
+        print(f"DEBUG: Error in action_request: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
     return redirect("/dairy/requests")
 
 
@@ -2387,9 +2479,9 @@ def monthly_report():
     conn.close()
     return render_template("dairy/monthly_report.html")
 
-# ------------------ MONTHLY ATTENDANCE GRID ------------------
-@app.route("/dairy/sheet", methods=["GET"])
-def attendance_sheet():
+# ------------------ MONTHLY ATTENDANCE GRID / ACCOUNTS ------------------
+@app.route("/dairy/sheet")
+def dairy_attendance_sheet():
     if session.get("role") != "admin":
         return redirect("/")
     

@@ -53,7 +53,7 @@
                         <td><strong>{{ p[1] }}</strong></td>
                         <td>₹{{ "{:,.2f}".format(p[2]) }}</td>
                         <td>
-                            <button onclick='editProduct({{ p | tojson }})' class="btn btn-sm btn-info" style="margin-right: 5px;">
+                            <button type="button" data-product='{{ p | tojson | forceescape }}' onclick="editProduct(JSON.parse(this.dataset.product))" class="btn btn-sm btn-info" style="margin-right: 5px;">
                                 <i class="fas fa-edit"></i> Edit
                             </button>
                             <form method="POST" style="display:inline;" onsubmit="return confirm('Delete this product? It will no longer appear in the dropdown for new additions.');">

@@ -149,9 +149,9 @@
 
 <script>
     window.INITIAL_CONFIG = {
-        customers: {{ customers | tojson }},
-        staff: {{ staff_list | tojson }},
-        masterProducts: {{ master_products_json | safe }}
+        customers: JSON.parse('{{ customers | tojson | safe }}'),
+        staff: JSON.parse('{{ staff_list | tojson | safe }}'),
+        masterProducts: JSON.parse('{{ master_products_json | safe }}')
     };
     
     const productOptions = window.INITIAL_CONFIG.masterProducts || [];
@@ -233,7 +233,7 @@
 </script>
 
 <script type="text/babel">
-{% raw %}
+/* {% raw %} */
     const { useState, useEffect, useMemo } = React;
     
     const AssetList = () => {
@@ -361,6 +361,6 @@
     const container = document.getElementById('customers-react-root');
     const root = ReactDOM.createRoot(container);
     root.render(<AssetList />);
-{% endraw %}
+/* {% endraw %} */
 </script>
 {% endblock %}
