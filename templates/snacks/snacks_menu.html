@@ -19,6 +19,22 @@
         const [editPreview, setEditPreview] = useState(null);
         const [editRemoveImage, setEditRemoveImage] = useState(false);
 
+        useEffect(() => {
+            const html = document.documentElement;
+            const body = document.body;
+            if (showEditModal) {
+                html.classList.add('modal-open');
+                body.classList.add('modal-open');
+            } else {
+                html.classList.remove('modal-open');
+                body.classList.remove('modal-open');
+            }
+            return () => {
+                html.classList.remove('modal-open');
+                body.classList.remove('modal-open');
+            };
+        }, [showEditModal]);
+
         useEffect(() => { fetchItems(); }, []);
 
         const fetchItems = async () => {
@@ -31,11 +47,14 @@
             setLoading(false);
         };
 
+        // Helper to check if value exists (including zero)
+        const hasValue = (v) => v !== '' && v !== null && v !== undefined;
+
         // Check if add form is complete
-        const isAddComplete = formData.name && formData.purchase_price && formData.retail_price && formData.wholesale_price && formData.stock !== '';
+        const isAddComplete = formData.name && hasValue(formData.purchase_price) && hasValue(formData.retail_price) && hasValue(formData.wholesale_price) && hasValue(formData.stock);
 
         // Check if edit form is complete
-        const isEditComplete = editItem && editItem.name && editItem.purchase_price && editItem.retail_price && editItem.wholesale_price && editItem.stock !== '';
+        const isEditComplete = editItem && editItem.name && hasValue(editItem.purchase_price) && hasValue(editItem.retail_price) && hasValue(editItem.wholesale_price) && hasValue(editItem.stock);
 
         const handleAdd = async (e) => {
             e.preventDefault();
@@ -121,17 +140,17 @@
         const handleImageChange = (e, target) => {
             const file = e.target.files[0];
             if (!file) return;
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                if (target === 'add') {
+            
+            if (target === 'add') {
+                const reader = new FileReader();
+                reader.onloadend = () => {
                     setFormData({ ...formData, image: file, preview: reader.result });
-                } else {
-                    setEditItem({ ...editItem, image: file });
-                    setEditPreview(reader.result);
-                    setEditRemoveImage(false);
-                }
-            };
-            reader.readAsDataURL(file);
+                };
+                reader.readAsDataURL(file);
+            } else {
+                setEditItem({ ...editItem, image: file });
+                setEditRemoveImage(false);
+            }
         };
 
         const removeAddImage = () => {
@@ -141,9 +160,10 @@
         };
 
         const removeEditImage = () => {
-            setEditPreview(null);
             setEditItem({ ...editItem, image: null });
             setEditRemoveImage(true);
+            const fileInput = document.getElementById('edit-image-input');
+            if (fileInput) fileInput.value = "";
         };
 
         return (
@@ -159,7 +179,18 @@
                     .pill-retail { background: var(--status-info-bg); color: var(--status-info-text); }
                     .pill-wholesale { background: var(--status-info-bg); opacity: 0.9; color: var(--status-info-text); }
                     .pill-purchase { background: var(--status-success-bg); color: var(--status-success-text); }
-                    .modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(4px); z-index: 1000; display: flex; align-items: center; justify-content: center; animation: fadeIn 0.3s; }
+                    .modal-overlay { 
+                        position: fixed; 
+                        inset: 0; 
+                        background: rgba(0, 0, 0, 0.7); 
+                        backdrop-filter: blur(4px); 
+                        z-index: 1000; 
+                        overflow-y: auto; 
+                        display: block; 
+                        padding: 4rem 1rem; 
+                        animation: fadeIn 0.3s; 
+                        overscroll-behavior: contain;
+                    }
                     .card-add { position: sticky; top: 1rem; }
                     .image-preview { width: 100%; height: 160px; border-radius: 12px; border: 2px dashed var(--border); display: flex; align-items: center; justify-content: center; margin-top: 10px; overflow: hidden; background: var(--surface-solid); position: relative; }
                     .image-preview img { width: 100%; height: 100%; object-fit: cover; }
@@ -167,6 +198,8 @@
                     .remove-img-btn:hover { background: rgb(185,28,28); }
                     .btn-save-complete { background: #2563eb !important; color: white !important; border-color: #2563eb !important; transition: background 0.3s, transform 0.1s; }
                     .btn-save-complete:hover { background: #1d4ed8 !important; }
+                    .modal-card { width: 500px; max-width: 95vw; background: var(--card-bg); border: 1px solid var(--border); margin: 0 auto; position: relative; }
+                    body.modal-open, html.modal-open { overflow: hidden !important; height: 100% !important; }
                     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
                 `}</style>
 
@@ -282,7 +315,7 @@
                 {/* Edit Modal */}
                 {showEditModal && editItem && (
                     <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
-                        <div className="card" style={ {width: '500px', maxWidth: '95vw', background: 'var(--card-bg)', border: '1px solid var(--border)'} } onClick={e => e.stopPropagation()}>
+                        <div className="card modal-card" onClick={e => e.stopPropagation()}>
                             <div style={ {display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '1.5rem'} }>
                                 <h3 style={ {fontWeight: 800, color: 'var(--text-main)'} }><i className="fas fa-edit mr-2" style={ {color: 'var(--warning)'} }></i>Edit Product</h3>
                                 <button onClick={() => setShowEditModal(false)} style={ {background:'none', border:'none', fontSize: '1.5rem', cursor:'pointer', color: 'var(--text-main)'} }>&times;</button>
@@ -314,12 +347,11 @@
                                 </div>
                                 <div className="form-group" style={ {marginTop: '1rem'} }>
                                     <label style={ {fontWeight: 700, color: 'var(--text-muted)'} }>Update Image (Optional, max 2MB)</label>
-                                    <input type="file" accept="image/*" onChange={e => handleImageChange(e, 'edit')} className="form-control" style={ {background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', padding: '10px'} } />
-                                    {editPreview && (
-                                        <div className="image-preview">
-                                            <img src={editPreview} alt="Preview" />
-                                            <button type="button" className="remove-img-btn" onClick={removeEditImage} title="Remove image">✕</button>
-                                        </div>
+                                    <input type="file" id="edit-image-input" accept="image/*" onChange={e => handleImageChange(e, 'edit')} className="form-control" style={ {background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', padding: '10px'} } />
+                                    {(editItem.image_url || editItem.image) && !editRemoveImage && (
+                                        <button type="button" onClick={removeEditImage} className="btn btn-sm" style={ {marginTop: '10px', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', border: '1px solid var(--danger)', padding: '6px 12px', fontSize: '0.8rem', borderRadius: '6px'} }>
+                                            <i className="fas fa-trash-alt mr-1"></i> Remove image
+                                        </button>
                                     )}
                                     {editRemoveImage && (
                                         <p style={ {color: 'var(--status-danger-text)', fontSize: '0.8rem', marginTop: '6px'} }><i className="fas fa-info-circle mr-1"></i>Image will be removed on save.</p>
