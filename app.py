@@ -15,14 +15,21 @@ from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
-import psycopg2
-from psycopg2.extras import DictCursor, RealDictCursor
 from db_config import DB_CONFIG
+import cloudinary
+import cloudinary.uploader
+import cloudinary.api
 
 # Load environment variables
 load_dotenv()
 
-# PostgreSQL connection helper
+# Cloudinary configuration
+CLOUDINARY_URL = os.getenv("CLOUDINARY_URL")
+if CLOUDINARY_URL:
+    print(f"DEBUG: Cloudinary URL detected: {CLOUDINARY_URL[:20]}...") 
+    cloudinary.config(secure=True)
+else:
+    print("CRITICAL: CLOUDINARY_URL NOT FOUND in environment variables!")
 def get_db_connection():
     return psycopg2.connect(**DB_CONFIG)
 
@@ -627,9 +634,25 @@ def snacks_menu():
             retail_price = float(request.form.get("retail_price", 0))
             wholesale_price = float(request.form.get("wholesale_price", 0))
             stock = int(request.form.get("stock", 0))
+            
+            file = request.files.get("image")
+            image_url = None
+            if file and file.filename != '':
+                if CLOUDINARY_URL:
+                    try:
+                        print("DEBUG: Attempting Cloudinary upload...")
+                        upload_result = cloudinary.uploader.upload(file, folder="snacks")
+                        image_url = upload_result.get("secure_url")
+                        print(f"DEBUG: Cloudinary upload successful: {image_url}")
+                    except Exception as e:
+                        print(f"ERROR: Cloudinary upload failed: {e}")
+                        flash(f"Image upload failed: {str(e)}", "danger")
+                else:
+                    flash("Cloudinary is not configured. Please contact admin.", "warning")
+
             cur.execute(
-                "INSERT INTO snacks_menu (name, price, purchase_price, retail_price, wholesale_price, stock) VALUES (%s, %s, %s, %s, %s, %s)",
-                (name, retail_price, purchase_price, retail_price, wholesale_price, stock)
+                "INSERT INTO snacks_menu (name, price, purchase_price, retail_price, wholesale_price, stock, image_url) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                (name, retail_price, purchase_price, retail_price, wholesale_price, stock, image_url)
             )
             conn.commit()
             flash(f"Product '{name}' added successfully!", "success")
@@ -641,10 +664,35 @@ def snacks_menu():
             retail_price = float(request.form.get("retail_price", 0))
             wholesale_price = float(request.form.get("wholesale_price", 0))
             stock = int(request.form.get("stock", 0))
-            cur.execute(
-                "UPDATE snacks_menu SET name=%s, price=%s, purchase_price=%s, retail_price=%s, wholesale_price=%s, stock=%s WHERE id=%s",
-                (name, retail_price, purchase_price, retail_price, wholesale_price, stock, item_id)
-            )
+
+            file = request.files.get("image")
+            if file and file.filename != '':
+                new_image_url = None
+                if CLOUDINARY_URL:
+                    try:
+                        upload_result = cloudinary.uploader.upload(file, folder="snacks")
+                        new_image_url = upload_result.get("secure_url")
+                    except Exception as e:
+                        print(f"Cloudinary upload failed: {e}")
+                        flash(f"Image update failed: {str(e)}", "danger")
+                else:
+                    flash("Cloudinary is not configured. Product updated without image.", "warning")
+                
+                if new_image_url:
+                    cur.execute(
+                        "UPDATE snacks_menu SET name=%s, price=%s, purchase_price=%s, retail_price=%s, wholesale_price=%s, stock=%s, image_url=%s WHERE id=%s",
+                        (name, retail_price, purchase_price, retail_price, wholesale_price, stock, new_image_url, item_id)
+                    )
+                else:
+                    cur.execute(
+                        "UPDATE snacks_menu SET name=%s, price=%s, purchase_price=%s, retail_price=%s, wholesale_price=%s, stock=%s WHERE id=%s",
+                        (name, retail_price, purchase_price, retail_price, wholesale_price, stock, item_id)
+                    )
+            else:
+                cur.execute(
+                    "UPDATE snacks_menu SET name=%s, price=%s, purchase_price=%s, retail_price=%s, wholesale_price=%s, stock=%s WHERE id=%s",
+                    (name, retail_price, purchase_price, retail_price, wholesale_price, stock, item_id)
+                )
             conn.commit()
             flash("Product updated.", "success")
 
@@ -656,7 +704,7 @@ def snacks_menu():
 
         return redirect("/snacks")
 
-    cur.execute("SELECT id, name, purchase_price, retail_price, wholesale_price, stock FROM snacks_menu ORDER BY id ASC")
+    cur.execute("SELECT id, name, purchase_price, retail_price, wholesale_price, stock, image_url FROM snacks_menu ORDER BY id ASC")
     items = cur.fetchall()
     conn.close()
     return render_template("snacks/snacks_menu.html", items=items)
@@ -728,10 +776,13 @@ def api_snacks_products():
     cur = conn.cursor()
 
     if request.method == "GET":
+        from psycopg2.extras import RealDictCursor
+        cur.close()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT id, name, purchase_price, retail_price, wholesale_price, stock, image_url FROM snacks_menu ORDER BY id ASC")
         items = cur.fetchall()
         conn.close()
-        return jsonify([{"id":r[0], "name":r[1], "purchase_price":r[2], "retail_price":r[3], "wholesale_price":r[4], "stock":r[5], "image_url":r[6]} for r in items])
+        return jsonify(items)
 
     elif request.method == "POST":
         name = request.form.get("name")
@@ -743,26 +794,36 @@ def api_snacks_products():
         file = request.files.get("image")
         image_url = None
         if file and file.filename != '':
-            file_bytes = file.read()
-            if len(file_bytes) > 2 * 1024 * 1024:
+            # Validate max size (2MB) before saving
+            file.seek(0, 2)
+            size = file.tell()
+            file.seek(0)
+            if size > 2 * 1024 * 1024:
                 return jsonify({"error": "Image size exceeds 2MB limit!"}), 400
             
-            import time
-            from werkzeug.utils import secure_filename
-            filename = f"{int(time.time())}_{secure_filename(file.filename)}"
-            file_path = os.path.join(UPLOAD_FOLDER_SNACKS, filename)
-            with open(file_path, "wb") as f:
-                f.write(file_bytes)
-            image_url = f"/static/uploads/snacks/{filename}"
+            if CLOUDINARY_URL:
+                try:
+                    print("DEBUG API: Attempting Cloudinary upload...")
+                    upload_result = cloudinary.uploader.upload(file, folder="snacks")
+                    image_url = upload_result.get("secure_url")
+                    print(f"DEBUG API: Cloudinary upload successful: {image_url}")
+                except Exception as e:
+                    print(f"ERROR API: Cloudinary upload failed: {e}")
+                    return jsonify({"error": f"Cloudinary upload failed: {str(e)}"}), 500
+            else:
+                return jsonify({"error": "Cloudinary is not configured on the server."}), 400
         
+        from psycopg2.extras import RealDictCursor
+        cur.close()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute(
-            "INSERT INTO snacks_menu (name, price, purchase_price, retail_price, wholesale_price, stock, image_url) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
+            "INSERT INTO snacks_menu (name, price, purchase_price, retail_price, wholesale_price, stock, image_url) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id, image_url",
             (name, retail_price, purchase_price, retail_price, wholesale_price, stock, image_url)
         )
-        new_id = cur.fetchone()[0]
+        res = cur.fetchone()
         conn.commit()
         conn.close()
-        return jsonify({"success": True, "id": new_id, "image_url": image_url})
+        return jsonify({"success": True, "id": res['id'], "image_url": res['image_url']})
 
     elif request.method == "PUT":
         item_id = request.form.get("id")
@@ -774,21 +835,36 @@ def api_snacks_products():
 
         file = request.files.get("image")
         if file and file.filename != '':
-            file_bytes = file.read()
-            if len(file_bytes) > 2 * 1024 * 1024:
+            # Validate max size
+            file.seek(0, 2)
+            size = file.tell()
+            file.seek(0)
+            if size > 2 * 1024 * 1024:
                 return jsonify({"error": "Image size exceeds 2MB limit!"}), 400
-            
-            import time
-            from werkzeug.utils import secure_filename
-            filename = f"{int(time.time())}_{secure_filename(file.filename)}"
-            file_path = os.path.join(UPLOAD_FOLDER_SNACKS, filename)
-            with open(file_path, "wb") as f:
-                f.write(file_bytes)
-            new_image_url = f"/static/uploads/snacks/{filename}"
-            cur.execute(
-                "UPDATE snacks_menu SET name=%s, price=%s, purchase_price=%s, retail_price=%s, wholesale_price=%s, stock=%s, image_url=%s WHERE id=%s",
-                (name, retail_price, purchase_price, retail_price, wholesale_price, stock, new_image_url, item_id)
-            )
+
+            new_image_url = None
+            if CLOUDINARY_URL:
+                try:
+                    print("DEBUG API PUT: Attempting Cloudinary upload...")
+                    upload_result = cloudinary.uploader.upload(file, folder="snacks")
+                    new_image_url = upload_result.get("secure_url")
+                    print(f"DEBUG API PUT: Cloudinary upload successful: {new_image_url}")
+                except Exception as e:
+                    print(f"ERROR API PUT: Cloudinary upload failed: {e}")
+                    return jsonify({"error": f"Cloudinary update failed: {str(e)}"}), 500
+            else:
+                return jsonify({"error": "Cloudinary is not configured."}), 400
+
+            if new_image_url:
+                cur.execute(
+                    "UPDATE snacks_menu SET name=%s, price=%s, purchase_price=%s, retail_price=%s, wholesale_price=%s, stock=%s, image_url=%s WHERE id=%s",
+                    (name, retail_price, purchase_price, retail_price, wholesale_price, stock, new_image_url, item_id)
+                )
+            else:
+                cur.execute(
+                    "UPDATE snacks_menu SET name=%s, price=%s, purchase_price=%s, retail_price=%s, wholesale_price=%s, stock=%s WHERE id=%s",
+                    (name, retail_price, purchase_price, retail_price, wholesale_price, stock, item_id)
+                )
         else:
             cur.execute(
                 "UPDATE snacks_menu SET name=%s, price=%s, purchase_price=%s, retail_price=%s, wholesale_price=%s, stock=%s WHERE id=%s",
