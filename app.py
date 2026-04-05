@@ -16,6 +16,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
 from db_config import DB_CONFIG
+import psycopg2
 import cloudinary
 import cloudinary.uploader
 import cloudinary.api
