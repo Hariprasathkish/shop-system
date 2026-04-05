@@ -192,6 +192,31 @@ def init_db():
     )
     """)
 
+    # Repacking Logs
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS snacks_repack_logs (
+        id SERIAL PRIMARY KEY,
+        bulk_item_id INTEGER NOT NULL REFERENCES snacks_menu(id),
+        repacked_item_id INTEGER NOT NULL REFERENCES snacks_menu(id),
+        bulk_qty_used REAL NOT NULL,
+        num_packets_created INTEGER NOT NULL,
+        packet_size TEXT,
+        cover_cost_total REAL DEFAULT 0,
+        date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    # Multi-purpose Expenses table (starting with repacking covers)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS snacks_expenses (
+        id SERIAL PRIMARY KEY,
+        description TEXT NOT NULL,
+        amount REAL NOT NULL,
+        category TEXT DEFAULT 'General',
+        date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
     # Dairy Tables — created in dependency order
 
     # 1. delivery_staff (no deps)
@@ -885,12 +910,120 @@ def api_snacks_products():
 
     elif request.method == "DELETE":
         item_id = request.args.get("id")
-        if not item_id:
-            return jsonify({"error": "Missing ID"}), 400
         cur.execute("DELETE FROM snacks_menu WHERE id=%s", (item_id,))
         conn.commit()
         conn.close()
         return jsonify({"success": True})
+
+@app.route("/api/snacks/repack", methods=["POST"])
+def api_snacks_repack():
+    if session.get("role") != "admin":
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    bulk_item_id = request.form.get("bulk_item_id")
+    repacked_item_id = request.form.get("repacked_item_id") # Optional: select existing
+    new_item_name = request.form.get("new_item_name") # Optional: create new
+    bulk_qty_used = float(request.form.get("bulk_qty_used", 1))
+    num_packets = int(request.form.get("num_packets", 0))
+    packet_size = request.form.get("packet_size", "")
+    retail_price = float(request.form.get("retail_price", 0))
+    cover_cost = float(request.form.get("cover_cost", 0))
+    
+    if not num_packets or num_packets <= 0:
+        return jsonify({"error": "Invalid number of packets"}), 400
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    try:
+        # 1. Get Bulk Item info
+        cur.execute("SELECT name, purchase_price, stock FROM snacks_menu WHERE id=%s", (bulk_item_id,))
+        bulk_item = cur.fetchone()
+        if not bulk_item:
+            return jsonify({"error": "Bulk product not found"}), 404
+        
+        if bulk_item[2] < bulk_qty_used:
+            return jsonify({"error": "Insufficient bulk stock"}), 400
+        
+        # 2. Calculate repacked purchase price
+        # Cost per packet = (Bulk Cost * Qty Used) / Num Packets
+        repacked_purchase_price = (bulk_item[1] * bulk_qty_used) / num_packets
+        
+        target_id = repacked_item_id
+        if not target_id or target_id == "" or target_id == "null":
+            # Create new product
+            cur.execute(
+                "INSERT INTO snacks_menu (name, price, purchase_price, retail_price, wholesale_price, stock) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+                (new_item_name, retail_price, repacked_purchase_price, retail_price, retail_price, num_packets)
+            )
+            target_id = cur.fetchone()[0]
+        else:
+            # Update existing product
+            cur.execute(
+                "UPDATE snacks_menu SET stock = stock + %s, purchase_price = %s, retail_price = %s, price = %s WHERE id = %s",
+                (num_packets, repacked_purchase_price, retail_price, retail_price, target_id)
+            )
+        
+        # 3. Deduct from bulk stock
+        cur.execute("UPDATE snacks_menu SET stock = stock - %s WHERE id = %s", (bulk_qty_used, bulk_item_id))
+        
+        # 4. Log the repack session
+        cur.execute(
+            "INSERT INTO snacks_repack_logs (bulk_item_id, repacked_item_id, bulk_qty_used, num_packets_created, packet_size, cover_cost_total) VALUES (%s, %s, %s, %s, %s, %s)",
+            (bulk_item_id, target_id, bulk_qty_used, num_packets, packet_size, cover_cost)
+        )
+        
+        # 5. Log the expense if cover cost > 0
+        if cover_cost > 0:
+            desc = f"Repacking covers for {new_item_name or 'Product ID '+str(target_id)}"
+            cur.execute(
+                "INSERT INTO snacks_expenses (description, amount, category) VALUES (%s, %s, 'Repacking')",
+                (desc, cover_cost)
+            )
+            
+        conn.commit()
+        return jsonify({"success": True, "repacked_item_id": target_id})
+    except Exception as e:
+        conn.rollback()
+        print(f"ERROR in repack API: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+@app.route("/api/snacks/expenses", methods=["POST", "GET"])
+def api_snacks_expenses():
+    if session.get("role") != "admin":
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    if request.method == "POST":
+        description = request.form.get("description")
+        amount = float(request.form.get("amount", 0))
+        category = request.form.get("category", "General")
+        
+        try:
+            cur.execute(
+                "INSERT INTO snacks_expenses (description, amount, category) VALUES (%s, %s, %s)",
+                (description, amount, category)
+            )
+            conn.commit()
+            return jsonify({"success": True})
+        except Exception as e:
+            conn.rollback()
+            return jsonify({"error": str(e)}), 500
+        finally:
+            conn.close()
+    else:
+        # GET
+        from psycopg2.extras import RealDictCursor
+        cur.close()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT * FROM snacks_expenses ORDER BY date DESC LIMIT 100")
+        items = cur.fetchall()
+        conn.close()
+        return jsonify(items)
 
 @app.route("/api/snacks/product_lookup")
 def snacks_product_lookup():
@@ -1168,8 +1301,21 @@ def snacks_accounts():
         """)
         
     profit_row = cur.fetchone()
-    total_profit = profit_row[0] or 0
-    total_revenue = profit_row[1] or 0
+    total_profit = float(profit_row[0] or 0)
+    total_revenue = float(profit_row[1] or 0)
+
+    # Calculate Expenses for the period
+    if start_date and end_date:
+        cur.execute("SELECT SUM(amount) FROM snacks_expenses WHERE date BETWEEN %s AND %s", (f"{start_date} 00:00:00", f"{end_date} 23:59:59"))
+    elif start_date:
+        cur.execute("SELECT SUM(amount) FROM snacks_expenses WHERE date >= %s", (f"{start_date} 00:00:00",))
+    elif end_date:
+        cur.execute("SELECT SUM(amount) FROM snacks_expenses WHERE date <= %s", (f"{end_date} 23:59:59",))
+    else:
+        cur.execute("SELECT SUM(amount) FROM snacks_expenses")
+    
+    total_expenses = float(cur.fetchone()[0] or 0)
+    grand_total_profit = total_profit - total_expenses
 
     # Recent bills - Filtered
     recent_query = f"SELECT id, date, bill_mode, customer_name, payment_mode, grand_total, payment_status FROM snacks_bills {where_clause} ORDER BY id DESC LIMIT 50"
@@ -1215,6 +1361,8 @@ def snacks_accounts():
         online_total=online_total,
         total_profit=total_profit,
         total_revenue=total_revenue,
+        total_expenses=total_expenses,
+        grand_total_profit=grand_total_profit,
         recent_bills=recent_bills,
         top_products=top_products,
         start_date=start_date,

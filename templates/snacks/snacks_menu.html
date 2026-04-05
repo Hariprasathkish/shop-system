@@ -19,6 +19,13 @@
         const [editPreview, setEditPreview] = useState(null);
         const [editRemoveImage, setEditRemoveImage] = useState(false);
 
+        // Repacking State
+        const [showRepackModal, setShowRepackModal] = useState(false);
+        const [repackBulkItem, setRepackBulkItem] = useState(null);
+        const [repackFormData, setRepackFormData] = useState({
+            num_packets: '', packet_size: '', retail_price: '', cover_cost: 0, target_item_id: '', new_item_name: ''
+        });
+
         useEffect(() => {
             const html = document.documentElement;
             const body = document.body;
@@ -166,6 +173,42 @@
             if (fileInput) fileInput.value = "";
         };
 
+        const openRepack = (item) => {
+            setRepackBulkItem(item);
+            setRepackFormData({
+                num_packets: '', packet_size: '', retail_price: '', cover_cost: 0, target_item_id: '', new_item_name: `${item.name} Repacked`
+            });
+            setShowRepackModal(true);
+        };
+
+        const handleRepackSubmit = async (e) => {
+            e.preventDefault();
+            const data = new FormData();
+            data.append('bulk_item_id', repackBulkItem.id);
+            data.append('num_packets', repackFormData.num_packets);
+            data.append('packet_size', repackFormData.packet_size);
+            data.append('retail_price', repackFormData.retail_price);
+            data.append('cover_cost', repackFormData.cover_cost);
+            data.append('new_item_name', repackFormData.new_item_name);
+            data.append('repacked_item_id', repackFormData.target_item_id);
+
+            const csrfToken = "{{ csrf_token() }}";
+            try {
+                const res = await fetch('/api/snacks/repack', {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken },
+                    body: data
+                });
+                if (res.ok) {
+                    setShowRepackModal(false);
+                    fetchItems();
+                } else {
+                    const errData = await res.json();
+                    alert(errData.error || "Failed to repack");
+                }
+            } catch (err) { console.error("Error repacking:", err); }
+        };
+
         return (
             <div className="container" style={ {maxWidth: '1200px', margin: '0 auto'} }>
                 <style>{`
@@ -296,6 +339,9 @@
                                         </div>
                                     </div>
                                     <div style={ {display: 'flex', gap: '8px', marginLeft: '1.5rem'} }>
+                                        <button onClick={() => openRepack(item)} className="btn btn-sm" style={ {background:'var(--status-success-bg)', color:'var(--status-success-text)', border: '1px solid var(--border)'} } title="Repack">
+                                            <i className="fas fa-boxes"></i>
+                                        </button>
                                         <a href={`/snacks/barcode/${item.id}`} className="btn btn-sm" style={ {background:'var(--surface-solid)', color:'var(--primary)', border: '1px solid var(--border)'} } title="Barcode">
                                             <i className="fas fa-barcode"></i>
                                         </a>
@@ -312,6 +358,74 @@
                     </div>
                 </div>
 
+                {/* Repack Modal */}
+                {showRepackModal && repackBulkItem && (
+                    <div className="modal-overlay" onClick={() => setShowRepackModal(false)}>
+                        <div className="card modal-card" onClick={e => e.stopPropagation()}>
+                            <div style={ {display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '1.5rem'} }>
+                                <h3 style={ {fontWeight: 800, color: 'var(--text-main)'} }><i className="fas fa-boxes mr-2" style={ {color: 'var(--success)'} }></i>Repack Tool</h3>
+                                <button onClick={() => setShowRepackModal(false)} style={ {background:'none', border:'none', fontSize: '1.5rem', cursor:'pointer', color: 'var(--text-main)'} }>&times;</button>
+                            </div>
+                            
+                            <div style={ {background: 'rgba(16, 185, 129, 0.05)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.2)', marginBottom: '1.5rem'} }>
+                                <p style={ {fontSize: '0.9rem', marginBottom: '0.25rem'} }><strong>Bulk Product:</strong> {repackBulkItem.name}</p>
+                                <p style={ {fontSize: '0.9rem', marginBottom: '0.25rem'} }><strong>Bulk Cost:</strong> ₹{repackBulkItem.purchase_price.toFixed(2)}</p>
+                                <p style={ {fontSize: '0.9rem'} }><strong>Available Stock:</strong> {repackBulkItem.stock} qty</p>
+                            </div>
+
+                            <form onSubmit={handleRepackSubmit}>
+                                <div className="form-group">
+                                    <label>Packaged Product Name</label>
+                                    <input type="text" value={repackFormData.new_item_name} onChange={e => setRepackFormData({...repackFormData, new_item_name: e.target.value})} className="form-control" placeholder="e.g. Chips 200g Pack" required />
+                                </div>
+                                <div className="grid-2">
+                                    <div className="form-group">
+                                        <label>Number of Packets</label>
+                                        <input type="number" value={repackFormData.num_packets} onChange={e => setRepackFormData({...repackFormData, num_packets: e.target.value})} className="form-control" placeholder="e.g. 5" required />
+                                    </div>
+                                    <div className="form-group">
+                                        <label>Pack Weight/Size</label>
+                                        <input type="text" value={repackFormData.packet_size} onChange={e => setRepackFormData({...repackFormData, packet_size: e.target.value})} className="form-control" placeholder="e.g. 200g" required />
+                                    </div>
+                                </div>
+                                <div className="grid-2">
+                                    <div className="form-group">
+                                        <label>Manual Retail Price (₹)</label>
+                                        <input type="number" step="0.01" value={repackFormData.retail_price} onChange={e => setRepackFormData({...repackFormData, retail_price: e.target.value})} className="form-control" placeholder="Selling Price" required />
+                                    </div>
+                                    <div className="form-group">
+                                        <label>Cover Charges (Total ₹)</label>
+                                        <input type="number" step="0.01" value={repackFormData.cover_cost} onChange={e => setRepackFormData({...repackFormData, cover_cost: e.target.value})} className="form-control" placeholder="Total Cost for Covers" />
+                                    </div>
+                                </div>
+
+                                {/* Math Preview Section */}
+                                {repackFormData.num_packets > 0 && (
+                                    <div style={ {background: 'var(--surface-solid)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border)', marginTop: '1rem', marginBottom: '1.5rem'} }>
+                                        <h5 style={ {fontSize: '0.8rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.5rem'} }>Math Breakdown</h5>
+                                        <div style={ {display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '4px'} }>
+                                            <span>Unit Purchase Cost:</span>
+                                            <span>₹{( (repackBulkItem.purchase_price) / repackFormData.num_packets ).toFixed(2)}</span>
+                                        </div>
+                                        <div style={ {display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '4px'} }>
+                                            <span>Cover Cost / Pack:</span>
+                                            <span>₹{( repackFormData.cover_cost / repackFormData.num_packets ).toFixed(2)}</span>
+                                        </div>
+                                        <div style={ {display: 'flex', justifyContent: 'space-between', fontSize: '1rem', fontWeight: 800, marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed var(--border)', color: 'var(--success)'} }>
+                                            <span>Est. Profit / Pack:</span>
+                                            <span>₹{( repackFormData.retail_price - ((repackBulkItem.purchase_price) / repackFormData.num_packets) - (repackFormData.cover_cost / repackFormData.num_packets) ).toFixed(2)}</span>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <button type="submit" className="btn btn-block btn-primary" style={ {height: '50px', background: 'linear-gradient(135deg, var(--success), #059669)'} }>
+                                    <i className="fas fa-check-circle mr-2"></i> Confirm Repack
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                )}
+                
                 {/* Edit Modal */}
                 {showEditModal && editItem && (
                     <div className="modal-overlay" onClick={() => setShowEditModal(false)}>

@@ -34,7 +34,7 @@
 </div>
 
 <!-- TOP STATS -->
-<div class="grid-4 mb-4">
+<div class="grid-4 mb-4" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
     <div class="card" style="text-align: center; border-bottom: 4px solid var(--success); background: var(--card-bg);">
         <span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 600; text-transform: uppercase;">Today's Revenue</span>
         <h2 style="margin: 5px 0; color: var(--success);">₹{{ "%.2f"|format(today_revenue) }}</h2>
@@ -44,25 +44,20 @@
         </div>
     </div>
     <div class="card" style="text-align: center; border-bottom: 4px solid var(--primary); background: var(--card-bg);">
-        <span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 600; text-transform: uppercase;">{{ period_label }} Revenue</span>
-        <h2 style="margin: 5px 0; color: var(--primary);">₹{{ "%.2f"|format(total_revenue) }}</h2>
-        <div style="display: flex; justify-content: center; gap: 10px; font-size: 0.75rem;">
-            <span style="color: var(--status-success-text);">C: ₹{{ cash_total }}</span>
-            <span style="color: var(--primary);">O: ₹{{ online_total }}</span>
-        </div>
+        <span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 600; text-transform: uppercase;">Gross Profit</span>
+        <h2 style="margin: 5px 0; color: var(--primary);">₹{{ "%.2f"|format(total_profit) }}</h2>
+        <small style="color: var(--text-muted);">Total Sales Margin</small>
     </div>
-    <div class="card" style="text-align: center; border-bottom: 4px solid var(--warning); background: var(--card-bg);">
-        <span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 600; text-transform: uppercase;">{{ period_label }} Profit</span>
-        <h2 style="margin: 5px 0; color: var(--warning);">₹{{ "%.2f"|format(total_profit) }}</h2>
-        <small style="color: var(--text-muted);">Total Gross Profit</small>
+    <div class="card" style="text-align: center; border-bottom: 4px solid var(--danger); background: var(--card-bg);">
+        <span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 600; text-transform: uppercase;">Total Expenses</span>
+        <h2 style="margin: 5px 0; color: var(--danger);">₹{{ "%.2f"|format(total_expenses) }}</h2>
+        <small style="color: var(--text-muted);">Covers & Others</small>
     </div>
-    <div class="card" style="text-align: center; border-bottom: 4px solid var(--accent); background: var(--card-bg);">
-        <span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 600; text-transform: uppercase;">Report Center</span>
-        <div style="margin-top: 10px;">
-            <a href="/snacks/generate_summary?start_date={{ start_date }}&end_date={{ end_date }}" class="btn btn-primary btn-sm" style="width: 100%; border-radius: 8px; font-size: 0.8rem;">
-                <i class="fas fa-file-pdf"></i> Generate PDF
-            </a>
-        </div>
+    <div class="card" style="text-align: center; border-bottom: 4px solid var(--warning); background: var(--card-bg); position: relative; overflow: hidden;">
+        <div style="position: absolute; top: 0; right: 0; padding: 5px 10px; background: var(--warning); color: white; font-size: 0.6rem; font-weight: 800; border-bottom-left-radius: 8px;">NET</div>
+        <span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 600; text-transform: uppercase;">Grand Total Profit</span>
+        <h2 style="margin: 5px 0; color: var(--warning);">₹{{ "%.2f"|format(grand_total_profit) }}</h2>
+        <small style="color: var(--text-muted);">Final Earnings</small>
     </div>
 </div>
 
@@ -155,7 +150,36 @@
         </div>
 
         <div class="card" style="background: var(--card-bg); border: 1px solid var(--border);">
+            <h3 style="color: var(--text-main);"><i class="fas fa-receipt" style="color:var(--danger);"></i> Add Expense</h3>
+            <form id="expenseForm" style="margin-top: 1rem;">
+                <div class="form-group" style="margin-bottom: 0.8rem;">
+                    <input type="text" id="expDesc" class="form-control" placeholder="Description (e.g. 50 Covers)" style="font-size: 0.85rem; padding: 0.5rem;" required>
+                </div>
+                <div style="display: flex; gap: 0.5rem; margin-bottom: 0.8rem;">
+                    <input type="number" id="expAmt" class="form-control" placeholder="Amount ₹" style="font-size: 0.85rem; padding: 0.5rem; flex: 2;" required>
+                    <select id="expCat" class="form-control" style="font-size: 0.85rem; padding: 0.5rem; flex: 3;">
+                        <option value="Repacking">Repacking</option>
+                        <option value="Packaging">Packaging</option>
+                        <option value="Transport">Transport</option>
+                        <option value="Others">Others</option>
+                    </select>
+                </div>
+                <button type="button" onclick="addExpense()" class="btn btn-primary btn-sm" style="width: 100%; border-radius: 8px;">
+                    <i class="fas fa-plus"></i> Record Expense
+                </button>
+            </form>
+        </div>
+
+        <div class="card" style="background: var(--card-bg); border: 1px solid var(--border);">
+            <h3 style="color: var(--text-main);"><i class="fas fa-history"></i> Recent Expenses</h3>
+            <div id="expenseList" style="max-height: 250px; overflow-y: auto; margin-top: 1rem;">
+                <p style="text-align: center; color: var(--text-muted); font-size: 0.8rem;">Loading expenses...</p>
+            </div>
+        </div>
+
+        <div class="card" style="background: var(--card-bg); border: 1px solid var(--border);">
             <h3 style="color: var(--text-main);"><i class="fas fa-credit-card" style="color:var(--success);"></i> Payment Mode</h3>
+...
             <div style="margin-bottom: 1rem;">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
                     <span style="font-weight: 600; color: var(--text-main);">Cash</span>
@@ -183,4 +207,63 @@
         <i class="fas fa-arrow-left"></i> Return to Admin Dashboard
     </a>
 </div>
+
+<script>
+    async function loadExpenses() {
+        const res = await fetch('/api/snacks/expenses');
+        const data = await res.json();
+        const container = document.getElementById('expenseList');
+        
+        if (data.length === 0) {
+            container.innerHTML = '<p style="text-align: center; color: var(--text-muted); font-size: 0.8rem;">No expenses recorded.</p>';
+            return;
+        }
+
+        container.innerHTML = data.map(exp => `
+            <div style="padding: 8px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+                <div style="flex: 1;">
+                    <p style="margin: 0; font-size: 0.85rem; font-weight: 600; color: var(--text-main);">${exp.description}</p>
+                    <small style="color: var(--text-muted); font-size: 0.7rem;">${exp.date.substring(5,16)} • ${exp.category}</small>
+                </div>
+                <span style="font-weight: 700; color: var(--danger); font-size: 0.85rem;">-₹${exp.amount.toFixed(2)}</span>
+            </div>
+        `).join('');
+    }
+
+    async function addExpense() {
+        const desc = document.getElementById('expDesc').value;
+        const amt = document.getElementById('expAmt').value;
+        const cat = document.getElementById('expCat').value;
+
+        if (!desc || !amt) {
+            alert("Please fill in description and amount");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('description', desc);
+        formData.append('amount', amt);
+        formData.append('category', cat);
+
+        const csrfToken = "{{ csrf_token() }}";
+        const res = await fetch('/api/snacks/expenses', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+            body: formData
+        });
+
+        if (res.ok) {
+            document.getElementById('expDesc').value = '';
+            document.getElementById('expAmt').value = '';
+            loadExpenses();
+            // Refresh page to update totals after a short delay
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            alert("Failed to save expense");
+        }
+    }
+
+    // Load on init
+    loadExpenses();
+</script>
 {% endblock %}
