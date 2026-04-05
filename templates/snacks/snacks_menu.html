@@ -14,12 +14,12 @@
         const [showEditModal, setShowEditModal] = useState(false);
         const [editItem, setEditItem] = useState(null);
         const [formData, setFormData] = useState({
-            name: '', purchase_price: '', retail_price: '', wholesale_price: '', stock: '', image: null
+            name: '', purchase_price: '', retail_price: '', wholesale_price: '', stock: '', image: null, preview: null
         });
+        const [editPreview, setEditPreview] = useState(null);
+        const [editRemoveImage, setEditRemoveImage] = useState(false);
 
-        useEffect(() => {
-            fetchItems();
-        }, []);
+        useEffect(() => { fetchItems(); }, []);
 
         const fetchItems = async () => {
             setLoading(true);
@@ -30,6 +30,12 @@
             } catch (err) { console.error("Error fetching items:", err); }
             setLoading(false);
         };
+
+        // Check if add form is complete
+        const isAddComplete = formData.name && formData.purchase_price && formData.retail_price && formData.wholesale_price && formData.stock !== '';
+
+        // Check if edit form is complete
+        const isEditComplete = editItem && editItem.name && editItem.purchase_price && editItem.retail_price && editItem.wholesale_price && editItem.stock !== '';
 
         const handleAdd = async (e) => {
             e.preventDefault();
@@ -49,7 +55,7 @@
                     body: data
                 });
                 if (res.ok) {
-                    setFormData({ name: '', purchase_price: '', retail_price: '', wholesale_price: '', stock: '', image: null });
+                    setFormData({ name: '', purchase_price: '', retail_price: '', wholesale_price: '', stock: '', image: null, preview: null });
                     const fileInput = document.getElementById('add-image-input');
                     if(fileInput) fileInput.value = "";
                     fetchItems();
@@ -69,7 +75,11 @@
             data.append('retail_price', editItem.retail_price);
             data.append('wholesale_price', editItem.wholesale_price);
             data.append('stock', editItem.stock);
-            if (editItem.image) data.append('image', editItem.image);
+            if (editRemoveImage) {
+                data.append('remove_image', 'true');
+            } else if (editItem.image) {
+                data.append('image', editItem.image);
+            }
 
             const csrfToken = "{{ csrf_token() }}";
             try {
@@ -80,6 +90,7 @@
                 });
                 if (res.ok) {
                     setShowEditModal(false);
+                    setEditRemoveImage(false);
                     fetchItems();
                 } else {
                     const errData = await res.json();
@@ -102,7 +113,37 @@
 
         const openEdit = (item) => {
             setEditItem({ ...item });
+            setEditPreview(item.image_url);
+            setEditRemoveImage(false);
             setShowEditModal(true);
+        };
+
+        const handleImageChange = (e, target) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                if (target === 'add') {
+                    setFormData({ ...formData, image: file, preview: reader.result });
+                } else {
+                    setEditItem({ ...editItem, image: file });
+                    setEditPreview(reader.result);
+                    setEditRemoveImage(false);
+                }
+            };
+            reader.readAsDataURL(file);
+        };
+
+        const removeAddImage = () => {
+            setFormData({ ...formData, image: null, preview: null });
+            const fileInput = document.getElementById('add-image-input');
+            if (fileInput) fileInput.value = "";
+        };
+
+        const removeEditImage = () => {
+            setEditPreview(null);
+            setEditItem({ ...editItem, image: null });
+            setEditRemoveImage(true);
         };
 
         return (
@@ -120,6 +161,12 @@
                     .pill-purchase { background: var(--status-success-bg); color: var(--status-success-text); }
                     .modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(4px); z-index: 1000; display: flex; align-items: center; justify-content: center; animation: fadeIn 0.3s; }
                     .card-add { position: sticky; top: 1rem; }
+                    .image-preview { width: 100%; height: 160px; border-radius: 12px; border: 2px dashed var(--border); display: flex; align-items: center; justify-content: center; margin-top: 10px; overflow: hidden; background: var(--surface-solid); position: relative; }
+                    .image-preview img { width: 100%; height: 100%; object-fit: cover; }
+                    .remove-img-btn { position: absolute; top: 6px; right: 6px; background: rgba(220,38,38,0.85); color: white; border: none; border-radius: 50%; width: 28px; height: 28px; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center; z-index: 2; transition: background 0.2s; }
+                    .remove-img-btn:hover { background: rgb(185,28,28); }
+                    .btn-save-complete { background: #2563eb !important; color: white !important; border-color: #2563eb !important; transition: background 0.3s, transform 0.1s; }
+                    .btn-save-complete:hover { background: #1d4ed8 !important; }
                     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
                 `}</style>
 
@@ -159,9 +206,15 @@
                             </div>
                             <div className="form-group" style={ {marginTop: '1rem'} }>
                                 <label style={ {fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-muted)'} }>Product Image (Optional, max 2MB)</label>
-                                <input type="file" id="add-image-input" accept="image/*" onChange={e => setFormData({...formData, image: e.target.files[0]})} className="form-control" style={ {background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', padding: '10px'} } />
+                                <input type="file" id="add-image-input" accept="image/*" onChange={e => handleImageChange(e, 'add')} className="form-control" style={ {background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', padding: '10px'} } />
+                                {formData.preview && (
+                                    <div className="image-preview">
+                                        <img src={formData.preview} alt="Preview" />
+                                        <button type="button" className="remove-img-btn" onClick={removeAddImage} title="Remove image">✕</button>
+                                    </div>
+                                )}
                             </div>
-                            <button type="submit" className="btn btn-warning btn-block" style={ {height: '50px', borderRadius: '12px', fontWeight: 800, marginTop: '2rem'} }><i className="fas fa-save mr-2"></i> Save Product</button>
+                            <button type="submit" className={`btn btn-block ${isAddComplete ? 'btn-save-complete' : 'btn-warning'}`} style={ {height: '50px', borderRadius: '12px', fontWeight: 800, marginTop: '2rem'} }><i className="fas fa-save mr-2"></i> Save Product</button>
                         </form>
                     </div>
 
@@ -261,9 +314,18 @@
                                 </div>
                                 <div className="form-group" style={ {marginTop: '1rem'} }>
                                     <label style={ {fontWeight: 700, color: 'var(--text-muted)'} }>Update Image (Optional, max 2MB)</label>
-                                    <input type="file" accept="image/*" onChange={e => setEditItem({...editItem, image: e.target.files[0]})} className="form-control" style={ {background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', padding: '10px'} } />
+                                    <input type="file" accept="image/*" onChange={e => handleImageChange(e, 'edit')} className="form-control" style={ {background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', padding: '10px'} } />
+                                    {editPreview && (
+                                        <div className="image-preview">
+                                            <img src={editPreview} alt="Preview" />
+                                            <button type="button" className="remove-img-btn" onClick={removeEditImage} title="Remove image">✕</button>
+                                        </div>
+                                    )}
+                                    {editRemoveImage && (
+                                        <p style={ {color: 'var(--status-danger-text)', fontSize: '0.8rem', marginTop: '6px'} }><i className="fas fa-info-circle mr-1"></i>Image will be removed on save.</p>
+                                    )}
                                 </div>
-                                <button type="submit" className="btn btn-warning btn-block" style={ {height: '50px', borderRadius: '12px', fontWeight: 800, marginTop: '2rem'} }><i className="fas fa-save mr-2"></i> Update Product</button>
+                                <button type="submit" className={`btn btn-block ${isEditComplete ? 'btn-save-complete' : 'btn-warning'}`} style={ {height: '50px', borderRadius: '12px', fontWeight: 800, marginTop: '2rem'} }><i className="fas fa-save mr-2"></i> Update Product</button>
                             </form>
                         </div>
                     </div>

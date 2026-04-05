@@ -834,8 +834,16 @@ def api_snacks_products():
         wholesale_price = float(request.form.get("wholesale_price", 0))
         stock = int(request.form.get("stock", 0))
 
+        remove_image = request.form.get("remove_image") == "true"
         file = request.files.get("image")
-        if file and file.filename != '':
+
+        if remove_image:
+            # Clear the image from the database
+            cur.execute(
+                "UPDATE snacks_menu SET name=%s, price=%s, purchase_price=%s, retail_price=%s, wholesale_price=%s, stock=%s, image_url=NULL WHERE id=%s",
+                (name, retail_price, purchase_price, retail_price, wholesale_price, stock, item_id)
+            )
+        elif file and file.filename != '':
             # Validate max size
             file.seek(0, 2)
             size = file.tell()
