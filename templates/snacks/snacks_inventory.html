@@ -125,7 +125,9 @@
             cost: item[2],
             retail: item[3],
             wholesale: item[4],
-            stock: item[5]
+            stock: item[5],
+            unit_size: item[6],
+            is_bulk: item[7]
         }));
 
         const [filter, setFilter] = useState('all'); // all, low, out
@@ -204,49 +206,73 @@
                     </div>
 
                     <div className="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Product Name</th>
-                                    <th>Cost</th>
-                                    <th>Retail</th>
-                                    <th>Wholesale</th>
-                                    <th style={ { textAlign: 'center' } }>Stock</th>
-                                    <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {filteredItems.map(item => (
-                                    <tr key={item.id}>
-                                        <td style={ { fontWeight: 800, color: 'var(--text-main)' } }>{item.name}</td>
-                                        <td style={ { color: 'var(--text-main)' } }>₹{item.cost?.toFixed(2)}</td>
-                                        <td style={ { color: 'var(--text-main)' } }>₹{item.retail?.toFixed(2)}</td>
-                                        <td style={ { color: 'var(--text-main)' } }>₹{item.wholesale?.toFixed(2)}</td>
-                                        <td style={ { textAlign: 'center' } }>
-                                            <span style={ {
-                                                fontSize: '1.1rem',
-                                                fontWeight: 800,
-                                                color: item.stock === 0 ? 'var(--danger)' : item.stock < 10 ? 'var(--warning)' : 'var(--success)'
-                                            } }>
-                                                {item.stock}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            {item.stock === 0 ? (
-                                                <span className="badge badge-out">Out of Stock</span>
-                                            ) : item.stock < 10 ? (
-                                                <span className="badge badge-low">Low Stock</span>
-                                            ) : (
-                                                <span className="badge badge-healthy">Healthy</span>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))}
-                                {filteredItems.length === 0 && (
+                        {[
+                            { title: 'Main Stock (1kg)', filter: (i) => i.is_bulk },
+                            { title: 'Half KG Stock', filter: (i) => !i.is_bulk && (i.unit_size?.toLowerCase().includes('half') || i.unit_size?.toLowerCase().includes('500')) },
+                            { title: 'Small Packs (Grams)', filter: (i) => !i.is_bulk && !(i.unit_size?.toLowerCase().includes('half') || i.unit_size?.toLowerCase().includes('500')) }
+                        ].map((group, idx) => {
+                            const groupItems = filteredItems.filter(group.filter);
+                            if (groupItems.length === 0) return null;
+                            
+                            return (
+                                <div key={idx} style={ { marginBottom: '2rem' } }>
+                                    <div style={ { padding: '10px 15px', background: 'var(--surface-solid)', borderBottom: '1px solid var(--border)', fontWeight: 800, color: 'var(--primary)', display: 'flex', justifyContent: 'space-between' } }>
+                                        <span>{group.title}</span>
+                                        <span>{groupItems.length} items</span>
+                                    </div>
+                                    <table>
+                                        <thead>
+                                            <tr>
+                                                <th>Product Name</th>
+                                                <th>Size</th>
+                                                <th>Retail</th>
+                                                <th>Wholesale</th>
+                                                <th style={ { textAlign: 'center' } }>Stock</th>
+                                                <th>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {groupItems.map(item => (
+                                                <tr key={item.id}>
+                                                    <td style={ { fontWeight: 800, color: 'var(--text-main)' } }>
+                                                        {item.name}
+                                                        {item.is_bulk && <span className="badge badge-healthy" style={ { marginLeft: '10px', fontSize: '0.6rem', background: 'var(--status-info-bg)', color: 'var(--status-info-text)' } }>In Progress / Source</span>}
+                                                    </td>
+                                                    <td style={ { color: 'var(--text-muted)', fontSize: '0.85rem' } }>{item.unit_size}</td>
+                                                    <td style={ { color: 'var(--text-main)' } }>₹{item.retail?.toFixed(2)}</td>
+                                                    <td style={ { color: 'var(--text-main)' } }>₹{item.wholesale?.toFixed(2)}</td>
+                                                    <td style={ { textAlign: 'center' } }>
+                                                        <span style={ {
+                                                            fontSize: '1.1rem',
+                                                            fontWeight: 800,
+                                                            color: item.stock === 0 ? 'var(--danger)' : item.stock < 10 ? 'var(--warning)' : 'var(--success)'
+                                                        } }>
+                                                            {item.stock}
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        {item.stock === 0 ? (
+                                                            <span className="badge badge-out">Out of Stock</span>
+                                                        ) : item.stock < 10 ? (
+                                                            <span className="badge badge-low">Low Stock</span>
+                                                        ) : (
+                                                            <span className="badge badge-healthy">Healthy</span>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            );
+                        })}
+                        {filteredItems.length === 0 && (
+                            <table>
+                                <tbody>
                                     <tr><td colSpan="6" style={ { textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' } }>No items found.</td></tr>
-                                )}
-                            </tbody>
-                        </table>
+                                </tbody>
+                            </table>
+                        )}
                     </div>
                 </div>
 

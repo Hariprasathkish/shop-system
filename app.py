@@ -109,6 +109,8 @@ def init_db():
         wholesale_price REAL NOT NULL DEFAULT 0,
         stock INTEGER NOT NULL DEFAULT 0,
         price REAL,
+        unit_size TEXT DEFAULT '1kg',
+        is_bulk BOOLEAN DEFAULT TRUE,
         image_url TEXT
     )
     """)
@@ -126,6 +128,12 @@ def init_db():
     except: pass
     try:
         cur.execute("ALTER TABLE snacks_menu ADD COLUMN IF NOT EXISTS image_url TEXT")
+    except: pass
+    try:
+        cur.execute("ALTER TABLE snacks_menu ADD COLUMN IF NOT EXISTS unit_size TEXT DEFAULT '1kg'")
+    except: pass
+    try:
+        cur.execute("ALTER TABLE snacks_menu ADD COLUMN IF NOT EXISTS is_bulk BOOLEAN DEFAULT TRUE")
     except: pass
 
     # Inward Stock from manufacturer
@@ -310,10 +318,22 @@ def init_db():
     try:
         # Cast date to DATE if it was TEXT
         cur.execute("ALTER TABLE dairy_logs ALTER COLUMN date TYPE DATE USING (date::DATE)")
+        
+        # Foreign Key Migration (ON DELETE SET NULL)
+        # 1. Check if constraint exists, drop and recreate it
+        try:
+            cur.execute("""
+                ALTER TABLE dairy_logs DROP CONSTRAINT IF EXISTS dairy_logs_product_id_fkey,
+                ADD CONSTRAINT dairy_logs_product_id_fkey FOREIGN KEY (product_id) REFERENCES customer_products(id) ON DELETE SET NULL
+            """)
+        except:
+            # Fallback if the automatic name is different (e.g. from an old dev version)
+            pass
+            
         conn.commit()
     except Exception as e:
         conn.rollback()
-        print(f"DEBUG: Migration dairy_logs date cast failed: {e}")
+        print(f"DEBUG: Migration dairy_logs date/FK cast failed: {e}")
     # 5. attendance_requests
     cur.execute("""
     CREATE TABLE IF NOT EXISTS attendance_requests (
@@ -805,7 +825,7 @@ def api_snacks_products():
         from psycopg2.extras import RealDictCursor
         cur.close()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT id, name, purchase_price, retail_price, wholesale_price, stock, image_url FROM snacks_menu ORDER BY id ASC")
+        cur.execute("SELECT id, name, purchase_price, retail_price, wholesale_price, stock, image_url, unit_size, is_bulk FROM snacks_menu ORDER BY id ASC")
         items = cur.fetchall()
         conn.close()
         return jsonify(items)
@@ -839,12 +859,15 @@ def api_snacks_products():
             else:
                 return jsonify({"error": "Cloudinary is not configured on the server."}), 400
         
+        unit_size = request.form.get("unit_size", "1kg")
+        is_bulk = request.form.get("is_bulk", "true").lower() == "true"
+        
         from psycopg2.extras import RealDictCursor
         cur.close()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute(
-            "INSERT INTO snacks_menu (name, price, purchase_price, retail_price, wholesale_price, stock, image_url) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id, image_url",
-            (name, retail_price, purchase_price, retail_price, wholesale_price, stock, image_url)
+            "INSERT INTO snacks_menu (name, price, purchase_price, retail_price, wholesale_price, stock, image_url, unit_size, is_bulk) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, image_url",
+            (name, retail_price, purchase_price, retail_price, wholesale_price, stock, image_url, unit_size, is_bulk)
         )
         res = cur.fetchone()
         conn.commit()
@@ -859,14 +882,17 @@ def api_snacks_products():
         wholesale_price = float(request.form.get("wholesale_price", 0))
         stock = int(request.form.get("stock", 0))
 
+        unit_size = request.form.get("unit_size", "1kg")
+        is_bulk = request.form.get("is_bulk", "true").lower() == "true"
+
         remove_image = request.form.get("remove_image") == "true"
         file = request.files.get("image")
 
         if remove_image:
             # Clear the image from the database
             cur.execute(
-                "UPDATE snacks_menu SET name=%s, price=%s, purchase_price=%s, retail_price=%s, wholesale_price=%s, stock=%s, image_url=NULL WHERE id=%s",
-                (name, retail_price, purchase_price, retail_price, wholesale_price, stock, item_id)
+                "UPDATE snacks_menu SET name=%s, price=%s, purchase_price=%s, retail_price=%s, wholesale_price=%s, stock=%s, unit_size=%s, is_bulk=%s, image_url=NULL WHERE id=%s",
+                (name, retail_price, purchase_price, retail_price, wholesale_price, stock, unit_size, is_bulk, item_id)
             )
         elif file and file.filename != '':
             # Validate max size
@@ -891,18 +917,18 @@ def api_snacks_products():
 
             if new_image_url:
                 cur.execute(
-                    "UPDATE snacks_menu SET name=%s, price=%s, purchase_price=%s, retail_price=%s, wholesale_price=%s, stock=%s, image_url=%s WHERE id=%s",
-                    (name, retail_price, purchase_price, retail_price, wholesale_price, stock, new_image_url, item_id)
+                    "UPDATE snacks_menu SET name=%s, price=%s, purchase_price=%s, retail_price=%s, wholesale_price=%s, stock=%s, unit_size=%s, is_bulk=%s, image_url=%s WHERE id=%s",
+                    (name, retail_price, purchase_price, retail_price, wholesale_price, stock, unit_size, is_bulk, new_image_url, item_id)
                 )
             else:
                 cur.execute(
-                    "UPDATE snacks_menu SET name=%s, price=%s, purchase_price=%s, retail_price=%s, wholesale_price=%s, stock=%s WHERE id=%s",
-                    (name, retail_price, purchase_price, retail_price, wholesale_price, stock, item_id)
+                    "UPDATE snacks_menu SET name=%s, price=%s, purchase_price=%s, retail_price=%s, wholesale_price=%s, stock=%s, unit_size=%s, is_bulk=%s WHERE id=%s",
+                    (name, retail_price, purchase_price, retail_price, wholesale_price, stock, unit_size, is_bulk, item_id)
                 )
         else:
             cur.execute(
-                "UPDATE snacks_menu SET name=%s, price=%s, purchase_price=%s, retail_price=%s, wholesale_price=%s, stock=%s WHERE id=%s",
-                (name, retail_price, purchase_price, retail_price, wholesale_price, stock, item_id)
+                "UPDATE snacks_menu SET name=%s, price=%s, purchase_price=%s, retail_price=%s, wholesale_price=%s, stock=%s, unit_size=%s, is_bulk=%s WHERE id=%s",
+                (name, retail_price, purchase_price, retail_price, wholesale_price, stock, unit_size, is_bulk, item_id)
             )
         conn.commit()
         conn.close()
@@ -910,7 +936,17 @@ def api_snacks_products():
 
     elif request.method == "DELETE":
         item_id = request.args.get("id")
+        # 1. Delete associated repack logs (FK constraint)
+        cur.execute("DELETE FROM snacks_repack_logs WHERE bulk_item_id=%s OR repacked_item_id=%s", (item_id, item_id))
+        
+        # 2. Delete associated stock/sales/bills (Clean-up)
+        cur.execute("DELETE FROM snacks_stock_in WHERE item_id=%s", (item_id,))
+        cur.execute("DELETE FROM snacks_bill_items WHERE item_id=%s", (item_id,))
+        cur.execute("DELETE FROM snacks_sales WHERE item_id=%s", (item_id,))
+        
+        # 3. Finally delete the product
         cur.execute("DELETE FROM snacks_menu WHERE id=%s", (item_id,))
+        
         conn.commit()
         conn.close()
         return jsonify({"success": True})
@@ -927,7 +963,7 @@ def api_snacks_repack():
     num_packets = int(request.form.get("num_packets", 0))
     packet_size = request.form.get("packet_size", "")
     retail_price = float(request.form.get("retail_price", 0))
-    cover_cost = float(request.form.get("cover_cost", 0))
+    # Cover cost removed as per user request
     
     if not num_packets or num_packets <= 0:
         return jsonify({"error": "Invalid number of packets"}), 400
@@ -953,33 +989,25 @@ def api_snacks_repack():
         if not target_id or target_id == "" or target_id == "null":
             # Create new product
             cur.execute(
-                "INSERT INTO snacks_menu (name, price, purchase_price, retail_price, wholesale_price, stock) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
-                (new_item_name, retail_price, repacked_purchase_price, retail_price, retail_price, num_packets)
+                "INSERT INTO snacks_menu (name, price, purchase_price, retail_price, wholesale_price, stock, unit_size, is_bulk) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                (new_item_name, retail_price, repacked_purchase_price, retail_price, retail_price, num_packets, packet_size, False)
             )
             target_id = cur.fetchone()[0]
         else:
             # Update existing product
             cur.execute(
-                "UPDATE snacks_menu SET stock = stock + %s, purchase_price = %s, retail_price = %s, price = %s WHERE id = %s",
-                (num_packets, repacked_purchase_price, retail_price, retail_price, target_id)
+                "UPDATE snacks_menu SET stock = stock + %s, purchase_price = %s, retail_price = %s, price = %s, unit_size = %s, is_bulk = %s WHERE id = %s",
+                (num_packets, repacked_purchase_price, retail_price, retail_price, packet_size, False, target_id)
             )
         
         # 3. Deduct from bulk stock
         cur.execute("UPDATE snacks_menu SET stock = stock - %s WHERE id = %s", (bulk_qty_used, bulk_item_id))
         
-        # 4. Log the repack session
+        # 4. Log the repack session (cover_cost removed)
         cur.execute(
             "INSERT INTO snacks_repack_logs (bulk_item_id, repacked_item_id, bulk_qty_used, num_packets_created, packet_size, cover_cost_total) VALUES (%s, %s, %s, %s, %s, %s)",
-            (bulk_item_id, target_id, bulk_qty_used, num_packets, packet_size, cover_cost)
+            (bulk_item_id, target_id, bulk_qty_used, num_packets, packet_size, 0)
         )
-        
-        # 5. Log the expense if cover cost > 0
-        if cover_cost > 0:
-            desc = f"Repacking covers for {new_item_name or 'Product ID '+str(target_id)}"
-            cur.execute(
-                "INSERT INTO snacks_expenses (description, amount, category) VALUES (%s, %s, 'Repacking')",
-                (desc, cover_cost)
-            )
             
         conn.commit()
         return jsonify({"success": True, "repacked_item_id": target_id})
@@ -1208,7 +1236,7 @@ def snacks_inventory():
         return redirect("/")
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT id, name, purchase_price, retail_price, wholesale_price, stock FROM snacks_menu ORDER BY name ASC")
+    cur.execute("SELECT id, name, purchase_price, retail_price, wholesale_price, stock, unit_size, is_bulk FROM snacks_menu ORDER BY name ASC")
     items = cur.fetchall()
     conn.close()
     return render_template("snacks/snacks_inventory.html", items=items)
@@ -2313,7 +2341,7 @@ def manage_customers():
                         if new_order < old_order:
                             cur.execute("UPDATE dairy_customers SET delivery_order = delivery_order + 1 WHERE delivery_order >= %s AND delivery_order < %s", (new_order, old_order))
                         else:
-                            cur.execute("UPDATE dairy_customers SET delivery_order = delivery_order - 1 WHERE delivery_order > old_order AND delivery_order <= new_order", (old_order, new_order))
+                            cur.execute("UPDATE dairy_customers SET delivery_order = delivery_order - 1 WHERE delivery_order > %s AND delivery_order <= %s", (old_order, new_order))
 
                 raw_password = get_val("password")
                 if raw_password and not raw_password.startswith("scrypt:"): # Avoid hashing an existing hash
@@ -2370,17 +2398,29 @@ def manage_customers():
                 conn.rollback()
 
         elif action == "delete":
-            cid = request.form["customer_id"]
-            # Close gap in slots
-            cur.execute("SELECT delivery_order FROM dairy_customers WHERE id=%s", (cid,))
-            res = cur.fetchone()
-            if res:
-                old_order = res[0]
-                cur.execute("UPDATE dairy_customers SET delivery_order = delivery_order - 1 WHERE delivery_order > %s", (old_order,))
+            try:
+                cid = request.form["customer_id"]
+                # Close gap in slots
+                cur.execute("SELECT delivery_order FROM dairy_customers WHERE id=%s", (cid,))
+                res = cur.fetchone()
+                if res:
+                    old_order = res[0]
+                    cur.execute("UPDATE dairy_customers SET delivery_order = delivery_order - 1 WHERE delivery_order > %s", (old_order,))
 
-            cur.execute("DELETE FROM customer_products WHERE customer_id=%s", (cid,))
-            cur.execute("DELETE FROM dairy_customers WHERE id=%s", (cid,))
-            conn.commit()
+                # Cascading Delete
+                cur.execute("DELETE FROM dairy_logs WHERE customer_id=%s", (cid,))
+                cur.execute("DELETE FROM attendance_requests WHERE customer_id=%s", (cid,))
+                cur.execute("DELETE FROM dairy_payments WHERE customer_id=%s", (cid,))
+                cur.execute("DELETE FROM dairy_extra_purchases WHERE customer_id=%s", (cid,))
+                cur.execute("DELETE FROM dairy_extra_notes WHERE customer_id=%s", (cid,))
+                cur.execute("DELETE FROM customer_products WHERE customer_id=%s", (cid,))
+                cur.execute("DELETE FROM dairy_customers WHERE id=%s", (cid,))
+                conn.commit()
+                flash("Customer and all related data purged successfully.", "success")
+            except Exception as e:
+                print("Error deleting customer:", e)
+                conn.rollback()
+                flash(f"Error deleting customer: {str(e)}", "danger")
     
     # Fetch Customers using the standard 16-column schema
     cur.execute("""
