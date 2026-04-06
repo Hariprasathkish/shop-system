@@ -408,8 +408,8 @@
                                                     </div>
                                                 </div>
                                             </div>
-                                            <div style={ {display: 'flex', gap: '8px', marginLeft: '1.5rem'} }>
-                                                <button onClick={() => openRepack(item)} className="btn btn-sm" style={ {background:'var(--status-success-bg)', color:'var(--status-success-text)', border: '1px solid var(--border)'} } title="Repack">
+                                            <div style={ {display: 'flex', gap: '8px', marginLeft: '1.25rem', flexShrink: 0} }>
+                                                <button onClick={() => { setRepackBulkItem(item); setShowRepackModal(true); }} className="btn btn-sm" style={ {background:'var(--status-success-bg)', color:'var(--status-success-text)', border: '1px solid var(--border)'} } title="Repack">
                                                     <i className="fas fa-boxes"></i>
                                                 </button>
                                                 <a href={`/snacks/barcode/${item.id}`} className="btn btn-sm" style={ {background:'var(--surface-solid)', color:'var(--primary)', border: '1px solid var(--border)'} } title="Barcode">
