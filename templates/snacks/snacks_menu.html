@@ -13,8 +13,9 @@
         const [loading, setLoading] = useState(true);
         const [showEditModal, setShowEditModal] = useState(false);
         const [editItem, setEditItem] = useState(null);
+        const [searchTerm, setSearchTerm] = useState('');
         const [formData, setFormData] = useState({
-            name: '', purchase_price: '', retail_price: '', wholesale_price: '', stock: '', unit_size: '1kg', is_bulk: true, image: null, preview: null
+            name: '', purchase_price: '', retail_price: '', wholesale_price: '', stock: '', unit_size: '1kg', is_bulk: true, barcode: '', image: null, preview: null
         });
         const [editPreview, setEditPreview] = useState(null);
         const [editRemoveImage, setEditRemoveImage] = useState(false);
@@ -73,6 +74,7 @@
             data.append('stock', formData.stock);
             data.append('unit_size', formData.unit_size);
             data.append('is_bulk', formData.is_bulk);
+            data.append('barcode', formData.barcode);
             if (formData.image) data.append('image', formData.image);
 
             const csrfToken = "{{ csrf_token() }}";
@@ -83,7 +85,7 @@
                     body: data
                 });
                 if (res.ok) {
-                    setFormData({ name: '', purchase_price: '', retail_price: '', wholesale_price: '', stock: '', unit_size: '1kg', is_bulk: true, image: null, preview: null });
+                    setFormData({ name: '', purchase_price: '', retail_price: '', wholesale_price: '', stock: '', unit_size: '1kg', is_bulk: true, barcode: '', image: null, preview: null });
                     const fileInput = document.getElementById('add-image-input');
                     if(fileInput) fileInput.value = "";
                     fetchItems();
@@ -105,6 +107,7 @@
             data.append('stock', editItem.stock);
             data.append('unit_size', editItem.unit_size);
             data.append('is_bulk', editItem.is_bulk);
+            data.append('barcode', editItem.barcode || '');
             if (editRemoveImage) {
                 data.append('remove_image', 'true');
             } else if (editItem.image) {
@@ -212,8 +215,13 @@
             } catch (err) { console.error("Error repacking:", err); }
         };
 
+        const filteredItems = items.filter(i => 
+            i.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+            (i.barcode && i.barcode.includes(searchTerm))
+        );
+
         return (
-            <div className="container" style={ {maxWidth: '1200px', margin: '0 auto'} }>
+            <div className="container" style={ {maxWidth: '1440px', margin: '0 auto'} }>
                 <style>{`
                     .product-card { display: flex; align-items: center; justify-content: space-between; padding: 1.25rem 1.5rem; border-radius: 1.5rem; background: var(--card-bg); border: 1px solid var(--border); margin-bottom: 1rem; transition: transform 0.2s, box-shadow 0.2s; box-shadow: var(--shadow-sm); }
                     .product-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
@@ -255,14 +263,23 @@
                     <p style={ {color: 'var(--text-muted)'} }>Dynamic Management Dashboard</p>
                 </div>
 
-                <div className="grid-2" style={ {alignItems: 'start', gap: '2rem'} }>
+                <div className="grid-2" style={ {gridTemplateColumns: 'minmax(420px, 450px) 1fr', alignItems: 'start', gap: '3rem'} }>
                     {/* Add Product Form */}
-                    <div className="card card-add" style={ {background: 'var(--card-bg)', border: '1px solid var(--border)'} }>
+                    <div className="card card-add" style={ {background: 'var(--card-bg)', border: '1px solid var(--border)', position: 'sticky', top: '1rem', zIndex: 10} }>
                         <h3 style={ {fontWeight: 800, marginBottom: '1.5rem', color: 'var(--text-main)'} }><i className="fas fa-plus-circle" style={ {color:'var(--warning)', marginRight: '10px'} }></i>Add Product</h3>
                         <form onSubmit={handleAdd}>
                             <div className="form-group">
                                 <label style={ {fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-muted)'} }>Product Name</label>
                                 <input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="e.g. Potato Chips 50g" className="form-control" style={ {background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'} } required />
+                            </div>
+                            <div className="form-group" style={ {marginTop: '1rem'} }>
+                                <label style={ {fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between'} }>
+                                    <span>Universal Barcode (Optional)</span>
+                                    <span style={ {cursor: 'pointer', color: 'var(--warning)'} } onClick={() => document.getElementById('add-barcode').focus()}>
+                                        <i className="fas fa-barcode"></i> Scan to Register
+                                    </span>
+                                </label>
+                                <input type="text" id="add-barcode" value={formData.barcode} onChange={e => setFormData({...formData, barcode: e.target.value})} placeholder="Scan or type barcode" className="form-control" style={ {background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'} } />
                             </div>
                             <div className="grid-2" style={ {gap: '1rem', marginTop: '1rem'} }>
                                 <div className="form-group">
@@ -311,8 +328,41 @@
                     {/* Product List */}
                     <div>
                         <div style={ {display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1.5rem'} }>
-                            <h3 style={ {fontWeight: 800, color: 'var(--text-main)'} }><i className="fas fa-list mr-2" style={ {color: 'var(--primary)'} }></i>Inventory ({items.length})</h3>
+                            <h3 style={ {fontWeight: 800, color: 'var(--text-main)'} }><i className="fas fa-list mr-2" style={ {color: 'var(--primary)'} }></i>Inventory ({filteredItems.length})</h3>
                             <a href="/snacks/stock" className="btn btn-sm" style={ {background:'var(--status-success-bg)', color:'var(--status-success-text)', borderRadius: '8px', padding: '6px 12px', fontWeight: 700, border: '1px solid var(--border)'} }><i className="fas fa-truck-loading mr-2"></i>Receive Stock</a>
+                        </div>
+
+                        {/* Instant Search Bar */}
+                        <div style={ {marginBottom: '2rem', position: 'relative'} }>
+                            <div style={ {position: 'absolute', left: '1.25rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none'} }>
+                                <i className="fas fa-search"></i>
+                            </div>
+                            <input 
+                                type="text" 
+                                placeholder="Search products by name or barcode..." 
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
+                                style={ {
+                                    paddingLeft: '3rem', 
+                                    height: '3.5rem', 
+                                    borderRadius: '1rem', 
+                                    border: '1px solid var(--border)', 
+                                    background: 'var(--input-bg)',
+                                    color: 'var(--text-main)',
+                                    fontSize: '1rem',
+                                    fontWeight: 500,
+                                    width: '100%',
+                                    boxShadow: 'var(--shadow-sm)'
+                                } }
+                            />
+                            {searchTerm && (
+                                <button 
+                                    onClick={() => setSearchTerm('')}
+                                    style={ {position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem'} }
+                                >
+                                    &times;
+                                </button>
+                            )}
                         </div>
                         
                         {loading ? (
@@ -327,49 +377,100 @@
                                 <p style={ {color: 'var(--text-muted)'} }>Start adding products using the form on the left</p>
                             </div>
                         ) : (
-                            items.map(item => (
-                                <div key={item.id} className="product-card">
-                                    <div style={ {display: 'flex', gap: '1.2rem', alignItems: 'center', flex: 1} }>
-                                        <div style={ {width: '80px', height: '80px', borderRadius: '16px', overflow: 'hidden', flexShrink: 0, border: '1px solid var(--border)', background: 'var(--surface-solid)', display: 'flex', alignItems: 'center', justifyContent: 'center'} }>
-                                            {item.image_url ? (
-                                                <img src={item.image_url} alt={item.name} style={ {width: '100%', height: '100%', objectFit: 'cover'} } />
-                                            ) : (
-                                                <i className="fas fa-hamburger fa-2x" style={ {color: 'var(--text-muted)', opacity: 0.5} }></i>
-                                            )}
-                                        </div>
-                                        <div style={ {flex: 1} }>
-                                            <div style={ {display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem'} }>
-                                                <span style={ {fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-main)'} }>{item.name}</span>
-                                                <span className={`badge-stock ${item.stock === 0 ? 'badge-zero' : item.stock < 10 ? 'badge-low' : 'badge-ok'}`}>
-                                                    {item.stock} Available
-                                                </span>
-                                                {item.is_bulk && <span className="badge-stock pill-purchase" style={ {fontSize: '0.65rem'} }>Main Stock</span>}
-                                                <span className="badge-stock pill-unit" style={ {fontSize: '0.65rem'} }>{item.unit_size}</span>
+                            <div style={ { display: 'flex', flexDirection: 'column', gap: '2rem' } }>
+                                {/* Main Stock Section */}
+                                <div>
+                                    <h4 style={ { fontWeight: 800, color: 'var(--primary)', marginBottom: '1rem', textTransform: 'uppercase', fontSize: '0.8rem', letterSpacing: '1px' } }>
+                                        <i className="fas fa-warehouse mr-2"></i> Main Stock (Bulk)
+                                    </h4>
+                                    {items.filter(i => i.is_bulk).map(item => (
+                                        <div key={item.id} className="product-card">
+                                            <div style={ {display: 'flex', gap: '1.2rem', alignItems: 'center', flex: 1} }>
+                                                <div style={ {width: '80px', height: '80px', borderRadius: '16px', overflow: 'hidden', flexShrink: 0, border: '1px solid var(--border)', background: 'var(--surface-solid)', display: 'flex', alignItems: 'center', justifyContent: 'center'} }>
+                                                    {item.image_url ? (
+                                                        <img src={item.image_url} alt={item.name} style={ {width: '100%', height: '100%', objectFit: 'cover'} } />
+                                                    ) : (
+                                                        <i className="fas fa-hamburger fa-2x" style={ {color: 'var(--text-muted)', opacity: 0.5} }></i>
+                                                    )}
+                                                </div>
+                                                <div style={ {flex: 1} }>
+                                                    <div style={ {display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem'} }>
+                                                        <span style={ {fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-main)'} }>{item.name}</span>
+                                                        <span className={`badge-stock ${item.stock === 0 ? 'badge-zero' : item.stock < 10 ? 'badge-low' : 'badge-ok'}`}>
+                                                            {item.stock} Available
+                                                        </span>
+                                                        <span className="badge-stock pill-unit" style={ {fontSize: '0.65rem'} }>{item.unit_size}</span>
+                                                    </div>
+                                                    <div>
+                                                        <span className="price-pill pill-purchase">Cost: ₹{item.purchase_price.toFixed(2)}</span>
+                                                        <span className="price-pill pill-retail">Retail: ₹{item.retail_price.toFixed(2)}</span>
+                                                        <span className="price-pill pill-wholesale">Wholesale: ₹{item.wholesale_price.toFixed(2)}</span>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <span className="price-pill pill-purchase">Cost: ₹{item.purchase_price.toFixed(2)}</span>
-                                                <span className="price-pill pill-retail">Retail: ₹{item.retail_price.toFixed(2)}</span>
-                                                <span className="price-pill pill-wholesale">Wholesale: ₹{item.wholesale_price.toFixed(2)}</span>
-                                                <code style={ {fontSize: '0.7rem', color: 'var(--text-muted)', background: 'var(--surface-solid)', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border)'} }>ID #{item.id}</code>
+                                            <div style={ {display: 'flex', gap: '8px', marginLeft: '1.5rem'} }>
+                                                <button onClick={() => openRepack(item)} className="btn btn-sm" style={ {background:'var(--status-success-bg)', color:'var(--status-success-text)', border: '1px solid var(--border)'} } title="Repack">
+                                                    <i className="fas fa-boxes"></i>
+                                                </button>
+                                                <a href={`/snacks/barcode/${item.id}`} className="btn btn-sm" style={ {background:'var(--surface-solid)', color:'var(--primary)', border: '1px solid var(--border)'} } title="Barcode">
+                                                    <i className="fas fa-barcode"></i>
+                                                </a>
+                                                <button onClick={() => openEdit(item)} className="btn btn-sm" style={ {background:'var(--surface-solid)', color:'var(--warning)', border: '1px solid var(--border)'} } title="Edit">
+                                                    <i className="fas fa-edit"></i>
+                                                </button>
+                                                <button onClick={() => handleDelete(item.id, item.name)} className="btn btn-sm" style={ {background:'var(--status-danger-bg)', color:'var(--status-danger-text)', border: '1px solid var(--border)'} } title="Delete">
+                                                    <i className="fas fa-trash"></i>
+                                                </button>
                                             </div>
                                         </div>
-                                    </div>
-                                    <div style={ {display: 'flex', gap: '8px', marginLeft: '1.5rem'} }>
-                                        <button onClick={() => openRepack(item)} className="btn btn-sm" style={ {background:'var(--status-success-bg)', color:'var(--status-success-text)', border: '1px solid var(--border)'} } title="Repack">
-                                            <i className="fas fa-boxes"></i>
-                                        </button>
-                                        <a href={`/snacks/barcode/${item.id}`} className="btn btn-sm" style={ {background:'var(--surface-solid)', color:'var(--primary)', border: '1px solid var(--border)'} } title="Barcode">
-                                            <i className="fas fa-barcode"></i>
-                                        </a>
-                                        <button onClick={() => openEdit(item)} className="btn btn-sm" style={ {background:'var(--surface-solid)', color:'var(--warning)', border: '1px solid var(--border)'} } title="Edit">
-                                            <i className="fas fa-edit"></i>
-                                        </button>
-                                        <button onClick={() => handleDelete(item.id, item.name)} className="btn btn-sm" style={ {background:'var(--status-danger-bg)', color:'var(--status-danger-text)', border: '1px solid var(--border)'} } title="Delete">
-                                            <i className="fas fa-trash"></i>
-                                        </button>
-                                    </div>
+                                    ))}
                                 </div>
-                            ))
+
+                                {/* Retail Section */}
+                                <div>
+                                    <h4 style={ { fontWeight: 800, color: 'var(--accent)', marginBottom: '1rem', textTransform: 'uppercase', fontSize: '0.8rem', letterSpacing: '1px' } }>
+                                        <i className="fas fa-shopping-basket mr-2"></i> Retail / Repacked Items
+                                    </h4>
+                                    {items.filter(i => !i.is_bulk).map(item => (
+                                        <div key={item.id} className="product-card" style={ { background: 'rgba(59, 130, 246, 0.05)', borderStyle: 'dashed' } }>
+                                            <div style={ {display: 'flex', gap: '1.2rem', alignItems: 'center', flex: 1} }>
+                                                <div style={ {width: '80px', height: '80px', borderRadius: '16px', overflow: 'hidden', flexShrink: 0, border: '1px solid var(--border)', background: 'var(--surface-solid)', display: 'flex', alignItems: 'center', justifyContent: 'center'} }>
+                                                    {item.image_url ? (
+                                                        <img src={item.image_url} alt={item.name} style={ {width: '100%', height: '100%', objectFit: 'cover'} } />
+                                                    ) : (
+                                                        <i className="fas fa-hamburger fa-2x" style={ {color: 'var(--text-muted)', opacity: 0.5} }></i>
+                                                    )}
+                                                </div>
+                                                <div style={ {flex: 1} }>
+                                                    <div style={ {display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem'} }>
+                                                        <span style={ {fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-main)'} }>{item.name}</span>
+                                                        <span className={`badge-stock ${item.stock === 0 ? 'badge-zero' : item.stock < 10 ? 'badge-low' : 'badge-ok'}`}>
+                                                            {item.stock} Available
+                                                        </span>
+                                                        <span className="badge-stock pill-unit" style={ {fontSize: '0.65rem', background: 'var(--accent)', color: '#fff'} }>{item.unit_size}</span>
+                                                    </div>
+                                                    <div>
+                                                        <span className="price-pill pill-purchase">Cost: ₹{item.purchase_price.toFixed(2)}</span>
+                                                        <span className="price-pill pill-retail">Retail: ₹{item.retail_price.toFixed(2)}</span>
+                                                        <span className="price-pill pill-wholesale">Wholesale: ₹{item.wholesale_price.toFixed(2)}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div style={ {display: 'flex', gap: '8px', marginLeft: '1.5rem'} }>
+                                                <a href={`/snacks/barcode/${item.id}`} className="btn btn-sm" style={ {background:'var(--surface-solid)', color:'var(--primary)', border: '1px solid var(--border)'} } title="Barcode">
+                                                    <i className="fas fa-barcode"></i>
+                                                </a>
+                                                <button onClick={() => openEdit(item)} className="btn btn-sm" style={ {background:'var(--surface-solid)', color:'var(--warning)', border: '1px solid var(--border)'} } title="Edit">
+                                                    <i className="fas fa-edit"></i>
+                                                </button>
+                                                <button onClick={() => handleDelete(item.id, item.name)} className="btn btn-sm" style={ {background:'var(--status-danger-bg)', color:'var(--status-danger-text)', border: '1px solid var(--border)'} } title="Delete">
+                                                    <i className="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
                         )}
                     </div>
                 </div>
@@ -451,6 +552,15 @@
                                 <div className="form-group">
                                     <label style={ {fontWeight: 700, color: 'var(--text-muted)'} }>Product Name</label>
                                     <input type="text" value={editItem.name} onChange={e => setEditItem({...editItem, name: e.target.value})} className="form-control" style={ {background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'} } required />
+                                </div>
+                                <div className="form-group" style={ {marginTop: '1rem'} }>
+                                    <label style={ {fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between'} }>
+                                        <span>Universal Barcode (Optional)</span>
+                                        <span style={ {cursor: 'pointer', color: 'var(--warning)'} } onClick={() => document.getElementById('edit-barcode').focus()}>
+                                            <i className="fas fa-barcode"></i> Scan to Register
+                                        </span>
+                                    </label>
+                                    <input type="text" id="edit-barcode" value={editItem.barcode || ''} onChange={e => setEditItem({...editItem, barcode: e.target.value})} placeholder="Scan or type barcode" className="form-control" style={ {background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'} } />
                                 </div>
                                 <div className="grid-2" style={ {gap: '1rem', marginTop: '1rem'} }>
                                     <div className="form-group">

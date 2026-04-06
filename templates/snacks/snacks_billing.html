@@ -165,22 +165,25 @@
             const trimmed = val.trim();
             if (!trimmed) return;
 
-            if (/^\d+$/.test(trimmed) || trimmed.startsWith("SNACK:")) {
-                const id = trimmed.startsWith("SNACK:") ? parseInt(trimmed.split(":")[1]) : parseInt(trimmed);
-                if (!isNaN(id)) {
-                    fetch(`/api/snacks/product_lookup?q=${id}`)
-                        .then(r => r.json())
-                        .then(data => {
-                            if(data.found) {
-                                onAddProduct(data);
-                                setSearchTerm('');
-                                setShowAuto(false);
-                                // Refocus after adding
-                                if (searchInputRef.current) searchInputRef.current.focus();
-                            }
-                        });
-                }
-            }
+            // Simplified: Always try to lookup the raw value first (handles ID or Barcode)
+            fetch(`/api/snacks/product_lookup?q=${encodeURIComponent(trimmed)}`)
+                .then(r => r.json())
+                .then(data => {
+                    // Handle single match (Barcode or ID)
+                    if (data.found) {
+                        onAddProduct(data);
+                        setSearchTerm('');
+                        setShowAuto(false);
+                        if (searchInputRef.current) searchInputRef.current.focus();
+                    } 
+                    // Handle name search results (array)
+                    else if (Array.isArray(data) && data.length === 1 && data[0].barcode === trimmed) {
+                        onAddProduct(data[0]);
+                        setSearchTerm('');
+                        setShowAuto(false);
+                        if (searchInputRef.current) searchInputRef.current.focus();
+                    }
+                });
         };
 
         const handleKeyDown = (e) => {
@@ -234,7 +237,7 @@
                                     }}>
                                         <strong>{prod.name}</strong> 
                                         <span style={ { float: 'right', color: 'var(--success)' } }>
-                                            ₹{(billMode === 'retail' ? prod.retail_price : prod.wholesale_price).toFixed(2)}
+                                            ₹{(!prod.is_bulk ? prod.retail_price : (billMode === 'retail' ? prod.retail_price : prod.wholesale_price)).toFixed(2)}
                                         </span>
                                     </div>
                                 ))}
@@ -430,8 +433,10 @@
                 if (existing) {
                     return prev.map(i => i.id === prod.id ? { ...i, qty: i.qty + 1 } : i);
                 } else {
-                    const price = (billMode === 'retail') ? prod.retail_price : prod.wholesale_price;
-                    return [...prev, { id: prod.id, name: prod.name, qty: 1, unit_price: price }];
+                    // PRICING RULE IMPROVEMENT: Repacked items (not bulk) always use retail_price (MRP)
+                    const price = (!prod.is_bulk) ? prod.retail_price : (billMode === 'retail' ? prod.retail_price : prod.wholesale_price);
+                    const displayName = `${prod.name} ${prod.unit_size}`;
+                    return [...prev, { id: prod.id, name: displayName, qty: 1, unit_price: price }];
                 }
             });
         };
@@ -544,10 +549,12 @@
                             </h4>
                             <div className="product-grid">
                                 {topItems.map((item, idx) => (
-                                    <div key={idx} className="product-btn" onClick={() => addProductById(item[0])}>
+                                    <div key={idx} className="product-btn" onClick={() => addProduct(item)}>
                                         <i className="fas fa-box-open" style={ { color: 'var(--primary)', opacity: 0.8, fontSize: '1.2rem', marginBottom: 5 } }></i>
-                                        <span style={ { fontSize: '0.75rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' } }>{item[1]}</span>
-                                        <span style={ { fontSize: '0.7rem', color: 'var(--success)', fontWeight: 700 } }>₹{item[2]}</span>
+                                        <span style={ { fontSize: '0.75rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' } }>{item.name}</span>
+                                        <span style={ { fontSize: '0.7rem', color: 'var(--success)', fontWeight: 700 } }>
+                                            ₹{( (!item.is_bulk) ? item.retail_price : (billMode === 'retail' ? item.retail_price : item.wholesale_price) ).toFixed(2)}
+                                        </span>
                                     </div>
                                 ))}
                             </div>

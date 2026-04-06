@@ -135,6 +135,9 @@ def init_db():
     try:
         cur.execute("ALTER TABLE snacks_menu ADD COLUMN IF NOT EXISTS is_bulk BOOLEAN DEFAULT TRUE")
     except: pass
+    try:
+        cur.execute("ALTER TABLE snacks_menu ADD COLUMN IF NOT EXISTS barcode TEXT UNIQUE")
+    except: pass
 
     # Inward Stock from manufacturer
     cur.execute("""
@@ -973,7 +976,7 @@ def api_snacks_repack():
     
     try:
         # 1. Get Bulk Item info
-        cur.execute("SELECT name, purchase_price, stock FROM snacks_menu WHERE id=%s", (bulk_item_id,))
+        cur.execute("SELECT name, purchase_price, stock, image_url FROM snacks_menu WHERE id=%s", (bulk_item_id,))
         bulk_item = cur.fetchone()
         if not bulk_item:
             return jsonify({"error": "Bulk product not found"}), 404
@@ -985,19 +988,33 @@ def api_snacks_repack():
         # Cost per packet = (Bulk Cost * Qty Used) / Num Packets
         repacked_purchase_price = (bulk_item[1] * bulk_qty_used) / num_packets
         
+        bulk_image_url = bulk_item[3] # Inherit from bulk
+        
         target_id = repacked_item_id
         if not target_id or target_id == "" or target_id == "null":
-            # Create new product
-            cur.execute(
-                "INSERT INTO snacks_menu (name, price, purchase_price, retail_price, wholesale_price, stock, unit_size, is_bulk) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
-                (new_item_name, retail_price, repacked_purchase_price, retail_price, retail_price, num_packets, packet_size, False)
-            )
-            target_id = cur.fetchone()[0]
+            # IMPROVEMENT: Check if a product with same name AND unit_size already exists
+            cur.execute("SELECT id FROM snacks_menu WHERE name=%s AND unit_size=%s", (new_item_name, packet_size))
+            existing_match = cur.fetchone()
+            
+            if existing_match:
+                target_id = existing_match[0]
+                # Update existing matching product
+                cur.execute(
+                    "UPDATE snacks_menu SET stock = stock + %s, purchase_price = %s, retail_price = %s, price = %s, is_bulk = %s, image_url = %s WHERE id = %s",
+                    (num_packets, repacked_purchase_price, retail_price, retail_price, False, bulk_image_url, target_id)
+                )
+            else:
+                # Create true new product
+                cur.execute(
+                    "INSERT INTO snacks_menu (name, price, purchase_price, retail_price, wholesale_price, stock, unit_size, is_bulk, image_url) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                    (new_item_name, retail_price, repacked_purchase_price, retail_price, retail_price, num_packets, packet_size, False, bulk_image_url)
+                )
+                target_id = cur.fetchone()[0]
         else:
-            # Update existing product
+            # Update existing product (user selected specifically)
             cur.execute(
-                "UPDATE snacks_menu SET stock = stock + %s, purchase_price = %s, retail_price = %s, price = %s, unit_size = %s, is_bulk = %s WHERE id = %s",
-                (num_packets, repacked_purchase_price, retail_price, retail_price, packet_size, False, target_id)
+                "UPDATE snacks_menu SET stock = stock + %s, purchase_price = %s, retail_price = %s, price = %s, unit_size = %s, is_bulk = %s, image_url = %s WHERE id = %s",
+                (num_packets, repacked_purchase_price, retail_price, retail_price, packet_size, False, bulk_image_url, target_id)
             )
         
         # 3. Deduct from bulk stock
@@ -1058,19 +1075,50 @@ def snacks_product_lookup():
     """Lookup product by ID or name for billing/autocomplete."""
     q = request.args.get("q", "").strip()
     conn = get_db_connection()
-    cur = conn.cursor()
+    from psycopg2.extras import RealDictCursor
+    cur = conn.cursor(cursor_factory=RealDictCursor)
     if q.isdigit():
-        cur.execute("SELECT id, name, retail_price, wholesale_price, stock FROM snacks_menu WHERE id=%s", (int(q),))
+        # First try exact barcode match
+        cur.execute("SELECT id, name, purchase_price, retail_price, wholesale_price, stock, is_bulk, unit_size, barcode FROM snacks_menu WHERE barcode=%s", (q,))
         row = cur.fetchone()
+        if not row:
+            # Then try exact ID match
+            cur.execute("SELECT id, name, purchase_price, retail_price, wholesale_price, stock, is_bulk, unit_size, barcode FROM snacks_menu WHERE id=%s", (int(q),))
+            row = cur.fetchone()
+        
         conn.close()
         if row:
-            return jsonify({"found": True, "id": row[0], "name": row[1], "retail_price": row[2], "wholesale_price": row[3], "stock": row[4]})
+            return jsonify({
+                "found": True, 
+                "id": row['id'], 
+                "name": row['name'], 
+                "purchase_price": row['purchase_price'],
+                "retail_price": row['retail_price'], 
+                "wholesale_price": row['wholesale_price'], 
+                "stock": row['stock'],
+                "is_bulk": row['is_bulk'],
+                "unit_size": row['unit_size'],
+                "barcode": row['barcode']
+            })
         return jsonify({"found": False})
     else:
-        cur.execute("SELECT id, name, retail_price, wholesale_price, stock FROM snacks_menu WHERE name LIKE %s ORDER BY name LIMIT 10", (f"{q}%",))
+        # Name search
+        cur.execute("SELECT id, name, purchase_price, retail_price, wholesale_price, stock, is_bulk, unit_size, barcode FROM snacks_menu WHERE name ILIKE %s ORDER BY name LIMIT 10", (f"%{q}%",))
         rows = cur.fetchall()
         conn.close()
-        return jsonify([{"id": r[0], "name": r[1], "retail_price": r[2], "wholesale_price": r[3], "stock": r[4]} for r in rows])
+        return jsonify([
+            {
+                "id": r['id'], 
+                "name": r['name'], 
+                "purchase_price": r['purchase_price'],
+                "retail_price": r['retail_price'], 
+                "wholesale_price": r['wholesale_price'], 
+                "stock": r['stock'],
+                "is_bulk": r['is_bulk'],
+                "unit_size": r['unit_size'],
+                "barcode": r['barcode']
+            } for r in rows
+        ])
 
 
 @app.route("/snacks/billing", methods=["GET", "POST"])
@@ -1149,7 +1197,10 @@ def snacks_billing():
         conn.close()
         return jsonify({"success": False, "error": "No data"})
 
-    cur.execute("SELECT id, name, retail_price, wholesale_price, stock FROM snacks_menu WHERE stock > 0 ORDER BY name")
+    from psycopg2.extras import RealDictCursor
+    cur.close()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("SELECT id, name, purchase_price, retail_price, wholesale_price, stock, unit_size, is_bulk FROM snacks_menu WHERE stock > 0 ORDER BY name")
     items = cur.fetchall()
     conn.close()
     return render_template("snacks/snacks_billing.html", items=items)
@@ -1186,6 +1237,12 @@ def snacks_bill_detail(bill_id):
     elif bill[8]:
         bill[8] = str(bill[8])
         
+    from psycopg2.extras import RealDictCursor
+    cur.close()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    from psycopg2.extras import RealDictCursor
+    cur.close()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
     cur.execute("SELECT * FROM snacks_bill_items WHERE bill_id=%s", (bill_id,))
     items = cur.fetchall()
     conn.close()

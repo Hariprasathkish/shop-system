@@ -148,11 +148,16 @@
         const [loading, setLoading] = useState(true);
         const today = new Date().toISOString().split('T')[0];
         const [formData, setFormData] = useState({ item_id: '', qty: '', purchase_price: '', supplier: '', notes: '', date: today });
+        const [barcodeSearch, setBarcodeSearch] = useState('');
+        const [scannedItem, setScannedItem] = useState(null);
         const [submitting, setSubmitting] = useState(false);
+        const qtyRef = useRef(null);
+        const barcodeRef = useRef(null);
 
         useEffect(() => {
             fetchItems();
             fetchLogs();
+            if (barcodeRef.current) barcodeRef.current.focus();
         }, []);
 
         const fetchItems = () => {
@@ -167,6 +172,43 @@
                 .then(data => {
                     setLogs(data.logs);
                     setLoading(false);
+                });
+        };
+
+        const handleBarcodeSearch = (e) => {
+            const val = e.target.value;
+            setBarcodeSearch(val);
+            if (val.length >= 1) {
+                // Potential optimization: debounce or only trigger on Enter
+                // For simplicity, we trigger on Enter or specific lengths
+            }
+        };
+
+        const onBarcodeSubmit = (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                processBarcode(barcodeSearch);
+            }
+        };
+
+        const processBarcode = (code) => {
+            if (!code.trim()) return;
+            fetch(`/api/snacks/product_lookup?q=${encodeURIComponent(code)}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.found) {
+                        setScannedItem(data);
+                        setFormData({
+                            ...formData,
+                            item_id: data.id,
+                            purchase_price: data.purchase_price || ''
+                        });
+                        setBarcodeSearch('');
+                        // Auto-focus quantity
+                        if (qtyRef.current) qtyRef.current.focus();
+                    } else {
+                        alert("Product not found with this barcode/ID.");
+                    }
                 });
         };
 
@@ -185,9 +227,11 @@
             })
             .then(() => {
                 setSubmitting(false);
-                setFormData({ item_id: '', qty: '', purchase_price: '', supplier: '', notes: '' });
+                setFormData({ item_id: '', qty: '', purchase_price: '', supplier: '', notes: '', date: today });
+                setScannedItem(null);
                 fetchLogs();
                 fetchItems();
+                if (barcodeRef.current) barcodeRef.current.focus();
             });
         };
 
@@ -205,7 +249,36 @@
 
                 <div className="stock-grid">
                     <div className="card">
-                        <h3 style={ { marginBottom: '1.5rem', color: 'var(--text-main)' } }><i className="fas fa-truck-loading mr-2" style={ { color: 'var(--primary)' } }></i> Receive Stock</h3>
+                        <div style={ { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' } }>
+                            <h3 style={ { margin: 0, color: 'var(--text-main)' } }><i className="fas fa-truck-loading mr-2" style={ { color: 'var(--primary)' } }></i> Receive Stock</h3>
+                            <div style={ { position: 'relative', width: '200px' } }>
+                                <i className="fas fa-barcode" style={ { position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--warning)', fontSize: '0.9rem' } }></i>
+                                <input 
+                                    ref={barcodeRef}
+                                    type="text" 
+                                    className="form-control" 
+                                    style={ { paddingLeft: '30px', height: '38px', fontSize: '0.8rem' } } 
+                                    placeholder="Quick Scan..." 
+                                    value={barcodeSearch}
+                                    onChange={handleBarcodeSearch}
+                                    onKeyDown={onBarcodeSubmit}
+                                />
+                            </div>
+                        </div>
+
+                        {scannedItem && (
+                            <div style={ { background: 'var(--status-success-bg)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border)', marginBottom: '1.5rem', animate: 'fadeIn 0.3s' } }>
+                                <div style={ { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }>
+                                    <div>
+                                        <h5 style={ { margin: 0, color: 'var(--status-success-text)', fontSize: '0.8rem', textTransform: 'uppercase' } }>Product Identified</h5>
+                                        <p style={ { margin: '4px 0 0', fontWeight: 800, color: 'var(--text-main)' } }>{scannedItem.name}</p>
+                                        <small style={ { color: 'var(--text-muted)' } }>Weight: <strong>{scannedItem.unit_size}</strong> | ID: {scannedItem.id}</small>
+                                    </div>
+                                    <button onClick={() => setScannedItem(null)} style={ { background: 'none', border: 'none', color: 'var(--status-success-text)', cursor: 'pointer' } }>&times;</button>
+                                </div>
+                            </div>
+                        )}
+
                         <form onSubmit={handleSubmit}>
                             <div className="form-group">
                                 <label>Select Product</label>
@@ -226,6 +299,7 @@
                                 <div className="form-group">
                                     <label>Quantity</label>
                                     <input 
+                                        ref={qtyRef}
                                         type="number" 
                                         className="form-control" 
                                         required 

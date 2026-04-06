@@ -52,9 +52,9 @@
 
     {% for item in items %}
     <div class="item-row">
-        <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ item[3] }}</span>
-        <span style="text-align:center;">{{ item[4] }}</span>
-        <span style="text-align:right;">{{ "%.2f"|format(item[6]) }}</span>
+        <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ item.item_name }}</span>
+        <span style="text-align:center;">{{ item.qty }}</span>
+        <span style="text-align:right;">{{ "%.2f"|format(item.total) }}</span>
     </div>
     {% endfor %}
 
