@@ -221,7 +221,7 @@
         );
 
         return (
-            <div className="container" style={ {maxWidth: '1440px', margin: '0 auto'} }>
+            <div className="container" style={ {maxWidth: '96%', margin: '0 auto', overflowX: 'hidden'} }>
                 <style>{`
                     .product-card { display: flex; align-items: center; justify-content: space-between; padding: 1.25rem 1.5rem; border-radius: 1.5rem; background: var(--card-bg); border: 1px solid var(--border); margin-bottom: 1rem; transition: transform 0.2s, box-shadow 0.2s; box-shadow: var(--shadow-sm); }
                     .product-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
@@ -263,7 +263,7 @@
                     <p style={ {color: 'var(--text-muted)'} }>Dynamic Management Dashboard</p>
                 </div>
 
-                <div className="grid-2" style={ {gridTemplateColumns: 'minmax(420px, 450px) 1fr', alignItems: 'start', gap: '3rem'} }>
+                <div className="grid-2" style={ {gridTemplateColumns: 'minmax(380px, 400px) minmax(0, 1fr)', alignItems: 'start', gap: '3rem'} }>
                     {/* Add Product Form */}
                     <div className="card card-add" style={ {background: 'var(--card-bg)', border: '1px solid var(--border)', position: 'sticky', top: '1rem', zIndex: 10} }>
                         <h3 style={ {fontWeight: 800, marginBottom: '1.5rem', color: 'var(--text-main)'} }><i className="fas fa-plus-circle" style={ {color:'var(--warning)', marginRight: '10px'} }></i>Add Product</h3>

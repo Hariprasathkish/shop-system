@@ -143,9 +143,22 @@
     const { useState, useEffect } = React;
 
     const StockApp = () => {
-        const [items, setItems] = useState([]);
-        const [logs, setLogs] = useState([]);
-        const [loading, setLoading] = useState(true);
+        // Data injected from backend
+        const initialItems = JSON.parse('{{ items|tojson|safe }}');
+        const initialLogs = JSON.parse('{{ stock_log|tojson|safe }}');
+
+        const [items, setItems] = useState(initialItems);
+        const [logs, setLogs] = useState(initialLogs.map(log => ({
+            id: log[0],
+            name: log[1],
+            qty: log[2],
+            cost: log[3],
+            supplier: log[4],
+            date: log[5],
+            notes: log[6]
+        })));
+        
+        const [loading, setLoading] = useState(false);
         const today = new Date().toISOString().split('T')[0];
         const [formData, setFormData] = useState({ item_id: '', qty: '', purchase_price: '', supplier: '', notes: '', date: today });
         const [barcodeSearch, setBarcodeSearch] = useState('');
@@ -155,33 +168,11 @@
         const barcodeRef = useRef(null);
 
         useEffect(() => {
-            fetchItems();
-            fetchLogs();
             if (barcodeRef.current) barcodeRef.current.focus();
         }, []);
 
-        const fetchItems = () => {
-            fetch('/api/stock/items')
-                .then(res => res.json())
-                .then(data => setItems(data.items));
-        };
-
-        const fetchLogs = () => {
-            fetch('/api/stock/history')
-                .then(res => res.json())
-                .then(data => {
-                    setLogs(data.logs);
-                    setLoading(false);
-                });
-        };
-
         const handleBarcodeSearch = (e) => {
-            const val = e.target.value;
-            setBarcodeSearch(val);
-            if (val.length >= 1) {
-                // Potential optimization: debounce or only trigger on Enter
-                // For simplicity, we trigger on Enter or specific lengths
-            }
+            setBarcodeSearch(e.target.value);
         };
 
         const onBarcodeSubmit = (e) => {
@@ -204,10 +195,9 @@
                             purchase_price: data.purchase_price || ''
                         });
                         setBarcodeSearch('');
-                        // Auto-focus quantity
                         if (qtyRef.current) qtyRef.current.focus();
                     } else {
-                        alert("Product not found with this barcode/ID.");
+                        alert("Product not found.");
                     }
                 });
         };
@@ -225,13 +215,13 @@
                 headers: { 'X-CSRFToken': csrfToken },
                 body: form
             })
-            .then(() => {
-                setSubmitting(false);
-                setFormData({ item_id: '', qty: '', purchase_price: '', supplier: '', notes: '', date: today });
-                setScannedItem(null);
-                fetchLogs();
-                fetchItems();
-                if (barcodeRef.current) barcodeRef.current.focus();
+            .then(res => {
+                if (res.ok) {
+                    window.location.reload(); // Simplest way to refresh both items and history
+                } else {
+                    setSubmitting(false);
+                    alert("Failed to update stock");
+                }
             });
         };
 
