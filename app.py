@@ -1277,7 +1277,7 @@ def snacks_stock():
     cur.execute("SELECT id, name, stock, purchase_price, retail_price FROM snacks_menu ORDER BY name")
     items = cur.fetchall()
     cur.execute("""
-        SELECT si.id, m.name, si.qty, si.purchase_price, si.supplier, si.date, si.notes
+        SELECT si.id, m.name, si.qty, si.purchase_price, si.supplier, TO_CHAR(si.date, 'YYYY-MM-DD HH24:MI:SS'), si.notes
         FROM snacks_stock_in si
         JOIN snacks_menu m ON si.item_id = m.id
         ORDER BY si.date DESC LIMIT 50
