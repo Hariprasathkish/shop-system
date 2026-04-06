@@ -151,8 +151,8 @@
         const [logs, setLogs] = useState(initialLogs.map(log => ({
             id: log[0],
             name: log[1],
-            qty: log[2],
-            cost: log[3],
+            qty: parseFloat(log[2] || 0),
+            cost: parseFloat(log[3] || 0),
             supplier: log[4],
             date: log[5],
             notes: log[6]
