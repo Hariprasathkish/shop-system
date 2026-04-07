@@ -828,7 +828,7 @@ def api_snacks_products():
         from psycopg2.extras import RealDictCursor
         cur.close()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT id, name, purchase_price, retail_price, wholesale_price, stock, image_url, unit_size, is_bulk FROM snacks_menu ORDER BY id ASC")
+        cur.execute("SELECT id, name, purchase_price, retail_price, wholesale_price, stock, image_url, unit_size, is_bulk, barcode FROM snacks_menu ORDER BY id ASC")
         items = cur.fetchall()
         conn.close()
         return jsonify(items)
@@ -839,6 +839,7 @@ def api_snacks_products():
         retail_price = float(request.form.get("retail_price", 0))
         wholesale_price = float(request.form.get("wholesale_price", 0))
         stock = int(request.form.get("stock", 0))
+        barcode_value = request.form.get("barcode", "").strip() or None
         
         file = request.files.get("image")
         image_url = None
@@ -869,13 +870,13 @@ def api_snacks_products():
         cur.close()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute(
-            "INSERT INTO snacks_menu (name, price, purchase_price, retail_price, wholesale_price, stock, image_url, unit_size, is_bulk) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, image_url",
-            (name, retail_price, purchase_price, retail_price, wholesale_price, stock, image_url, unit_size, is_bulk)
+            "INSERT INTO snacks_menu (name, price, purchase_price, retail_price, wholesale_price, stock, image_url, unit_size, is_bulk, barcode) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, image_url, barcode",
+            (name, retail_price, purchase_price, retail_price, wholesale_price, stock, image_url, unit_size, is_bulk, barcode_value)
         )
         res = cur.fetchone()
         conn.commit()
         conn.close()
-        return jsonify({"success": True, "id": res['id'], "image_url": res['image_url']})
+        return jsonify({"success": True, "id": res['id'], "image_url": res['image_url'], "barcode": res['barcode']})
 
     elif request.method == "PUT":
         item_id = request.form.get("id")
@@ -884,6 +885,7 @@ def api_snacks_products():
         retail_price = float(request.form.get("retail_price", 0))
         wholesale_price = float(request.form.get("wholesale_price", 0))
         stock = int(request.form.get("stock", 0))
+        barcode_value = request.form.get("barcode", "").strip() or None
 
         unit_size = request.form.get("unit_size", "1kg")
         is_bulk = request.form.get("is_bulk", "true").lower() == "true"
@@ -894,8 +896,8 @@ def api_snacks_products():
         if remove_image:
             # Clear the image from the database
             cur.execute(
-                "UPDATE snacks_menu SET name=%s, price=%s, purchase_price=%s, retail_price=%s, wholesale_price=%s, stock=%s, unit_size=%s, is_bulk=%s, image_url=NULL WHERE id=%s",
-                (name, retail_price, purchase_price, retail_price, wholesale_price, stock, unit_size, is_bulk, item_id)
+                "UPDATE snacks_menu SET name=%s, price=%s, purchase_price=%s, retail_price=%s, wholesale_price=%s, stock=%s, unit_size=%s, is_bulk=%s, barcode=%s, image_url=NULL WHERE id=%s",
+                (name, retail_price, purchase_price, retail_price, wholesale_price, stock, unit_size, is_bulk, barcode_value, item_id)
             )
         elif file and file.filename != '':
             # Validate max size
@@ -920,18 +922,18 @@ def api_snacks_products():
 
             if new_image_url:
                 cur.execute(
-                    "UPDATE snacks_menu SET name=%s, price=%s, purchase_price=%s, retail_price=%s, wholesale_price=%s, stock=%s, unit_size=%s, is_bulk=%s, image_url=%s WHERE id=%s",
-                    (name, retail_price, purchase_price, retail_price, wholesale_price, stock, unit_size, is_bulk, new_image_url, item_id)
+                    "UPDATE snacks_menu SET name=%s, price=%s, purchase_price=%s, retail_price=%s, wholesale_price=%s, stock=%s, unit_size=%s, is_bulk=%s, barcode=%s, image_url=%s WHERE id=%s",
+                    (name, retail_price, purchase_price, retail_price, wholesale_price, stock, unit_size, is_bulk, barcode_value, new_image_url, item_id)
                 )
             else:
                 cur.execute(
-                    "UPDATE snacks_menu SET name=%s, price=%s, purchase_price=%s, retail_price=%s, wholesale_price=%s, stock=%s, unit_size=%s, is_bulk=%s WHERE id=%s",
-                    (name, retail_price, purchase_price, retail_price, wholesale_price, stock, unit_size, is_bulk, item_id)
+                    "UPDATE snacks_menu SET name=%s, price=%s, purchase_price=%s, retail_price=%s, wholesale_price=%s, stock=%s, unit_size=%s, is_bulk=%s, barcode=%s WHERE id=%s",
+                    (name, retail_price, purchase_price, retail_price, wholesale_price, stock, unit_size, is_bulk, barcode_value, item_id)
                 )
         else:
             cur.execute(
-                "UPDATE snacks_menu SET name=%s, price=%s, purchase_price=%s, retail_price=%s, wholesale_price=%s, stock=%s, unit_size=%s, is_bulk=%s WHERE id=%s",
-                (name, retail_price, purchase_price, retail_price, wholesale_price, stock, unit_size, is_bulk, item_id)
+                "UPDATE snacks_menu SET name=%s, price=%s, purchase_price=%s, retail_price=%s, wholesale_price=%s, stock=%s, unit_size=%s, is_bulk=%s, barcode=%s WHERE id=%s",
+                (name, retail_price, purchase_price, retail_price, wholesale_price, stock, unit_size, is_bulk, barcode_value, item_id)
             )
         conn.commit()
         conn.close()
@@ -1074,51 +1076,53 @@ def api_snacks_expenses():
 def snacks_product_lookup():
     """Lookup product by ID or name for billing/autocomplete."""
     q = request.args.get("q", "").strip()
+    if not q:
+        return jsonify({"found": False})
     conn = get_db_connection()
     from psycopg2.extras import RealDictCursor
     cur = conn.cursor(cursor_factory=RealDictCursor)
-    if q.isdigit():
-        # First try exact barcode match
-        cur.execute("SELECT id, name, purchase_price, retail_price, wholesale_price, stock, is_bulk, unit_size, barcode FROM snacks_menu WHERE barcode=%s", (q,))
-        row = cur.fetchone()
-        if not row:
-            # Then try exact ID match
-            cur.execute("SELECT id, name, purchase_price, retail_price, wholesale_price, stock, is_bulk, unit_size, barcode FROM snacks_menu WHERE id=%s", (int(q),))
+    cur.execute("SELECT id, name, purchase_price, retail_price, wholesale_price, stock, is_bulk, unit_size, barcode FROM snacks_menu WHERE barcode=%s", (q,))
+    row = cur.fetchone()
+    if not row and q.upper().startswith("SNACK:"):
+        snack_id = q.split(":", 1)[1].strip()
+        if snack_id.isdigit():
+            cur.execute("SELECT id, name, purchase_price, retail_price, wholesale_price, stock, is_bulk, unit_size, barcode FROM snacks_menu WHERE id=%s", (int(snack_id),))
             row = cur.fetchone()
-        
+    if not row and q.isdigit():
+        cur.execute("SELECT id, name, purchase_price, retail_price, wholesale_price, stock, is_bulk, unit_size, barcode FROM snacks_menu WHERE id=%s", (int(q),))
+        row = cur.fetchone()
+
+    if row:
         conn.close()
-        if row:
-            return jsonify({
-                "found": True, 
-                "id": row['id'], 
-                "name": row['name'], 
-                "purchase_price": row['purchase_price'],
-                "retail_price": row['retail_price'], 
-                "wholesale_price": row['wholesale_price'], 
-                "stock": row['stock'],
-                "is_bulk": row['is_bulk'],
-                "unit_size": row['unit_size'],
-                "barcode": row['barcode']
-            })
-        return jsonify({"found": False})
-    else:
-        # Name search
-        cur.execute("SELECT id, name, purchase_price, retail_price, wholesale_price, stock, is_bulk, unit_size, barcode FROM snacks_menu WHERE name ILIKE %s ORDER BY name LIMIT 10", (f"%{q}%",))
-        rows = cur.fetchall()
-        conn.close()
-        return jsonify([
-            {
-                "id": r['id'], 
-                "name": r['name'], 
-                "purchase_price": r['purchase_price'],
-                "retail_price": r['retail_price'], 
-                "wholesale_price": r['wholesale_price'], 
-                "stock": r['stock'],
-                "is_bulk": r['is_bulk'],
-                "unit_size": r['unit_size'],
-                "barcode": r['barcode']
-            } for r in rows
-        ])
+        return jsonify({
+            "found": True,
+            "id": row['id'],
+            "name": row['name'],
+            "purchase_price": row['purchase_price'],
+            "retail_price": row['retail_price'],
+            "wholesale_price": row['wholesale_price'],
+            "stock": row['stock'],
+            "is_bulk": row['is_bulk'],
+            "unit_size": row['unit_size'],
+            "barcode": row['barcode']
+        })
+
+    cur.execute("SELECT id, name, purchase_price, retail_price, wholesale_price, stock, is_bulk, unit_size, barcode FROM snacks_menu WHERE name ILIKE %s ORDER BY name LIMIT 10", (f"%{q}%",))
+    rows = cur.fetchall()
+    conn.close()
+    return jsonify([
+        {
+            "id": r['id'],
+            "name": r['name'],
+            "purchase_price": r['purchase_price'],
+            "retail_price": r['retail_price'],
+            "wholesale_price": r['wholesale_price'],
+            "stock": r['stock'],
+            "is_bulk": r['is_bulk'],
+            "unit_size": r['unit_size'],
+            "barcode": r['barcode']
+        } for r in rows
+    ])
 
 
 @app.route("/snacks/billing", methods=["GET", "POST"])

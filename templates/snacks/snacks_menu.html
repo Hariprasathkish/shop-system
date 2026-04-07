@@ -5,8 +5,209 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://unpkg.com/html5-qrcode"></script>
 <script type="text/babel">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    const BarcodeScannerModal = ({ targetLabel, onScan, onClose }) => {
+        const [cameras, setCameras] = useState([]);
+        const [selectedCamera, setSelectedCamera] = useState('');
+        const [error, setError] = useState('');
+        const [scannerStatus, setScannerStatus] = useState('starting');
+        const html5QrCodeRef = useRef(null);
+
+        const playBeep = () => {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.15);
+                setTimeout(() => audioCtx.close(), 200);
+            } catch (e) {}
+        };
+
+        const stopScanner = useCallback(async () => {
+            if (html5QrCodeRef.current) {
+                try {
+                    await html5QrCodeRef.current.stop();
+                } catch (e) {}
+                try {
+                    await html5QrCodeRef.current.clear();
+                } catch (e) {}
+            }
+        }, []);
+
+        const startScanner = useCallback(async (cameraId) => {
+            if (!html5QrCodeRef.current || !cameraId) return;
+            setError('');
+            setScannerStatus('starting');
+            try {
+                const formats = [
+                    window.Html5QrcodeSupportedFormats?.QR_CODE,
+                    window.Html5QrcodeSupportedFormats?.CODE_128,
+                    window.Html5QrcodeSupportedFormats?.EAN_13,
+                    window.Html5QrcodeSupportedFormats?.EAN_8,
+                    window.Html5QrcodeSupportedFormats?.UPC_A,
+                    window.Html5QrcodeSupportedFormats?.UPC_E,
+                    window.Html5QrcodeSupportedFormats?.CODE_39
+                ].filter(v => v !== undefined);
+
+                if (html5QrCodeRef.current.getState && html5QrCodeRef.current.getState() === 2) {
+                    await html5QrCodeRef.current.stop();
+                }
+
+                await html5QrCodeRef.current.start(
+                    cameraId,
+                    {
+                        fps: 20,
+                        qrbox: { width: 280, height: 180 },
+                        aspectRatio: 1,
+                        formatsToSupport: formats
+                    },
+                    (decodedText) => {
+                        if (!decodedText) return;
+                        setScannerStatus('scanned');
+                        playBeep();
+                        if (navigator.vibrate) navigator.vibrate(120);
+                        onScan(decodedText.trim());
+                    }
+                );
+                setScannerStatus('ready');
+            } catch (err) {
+                console.error('Snack menu scanner error:', err);
+                setError('Could not start the camera scanner. Please allow camera access and try again.');
+                setScannerStatus('error');
+            }
+        }, [onScan]);
+
+        useEffect(() => {
+            let ignore = false;
+            const init = async () => {
+                try {
+                    html5QrCodeRef.current = new Html5Qrcode('snacks-menu-reader');
+                    const devices = await Html5Qrcode.getCameras();
+                    if (ignore) return;
+
+                    if (!devices || devices.length === 0) {
+                        setError('No internal camera was found on this device.');
+                        setScannerStatus('error');
+                        return;
+                    }
+
+                    const filtered = devices.filter(d =>
+                        !(d.label || '').toLowerCase().includes('virtual') &&
+                        !(d.label || '').toLowerCase().includes('droidcam')
+                    );
+                    const activeDevices = filtered.length > 0 ? filtered : devices;
+                    setCameras(activeDevices);
+
+                    const savedId = localStorage.getItem('snacks_menu_preferred_cam');
+                    const preferredBack = activeDevices.find(d => {
+                        const label = (d.label || '').toLowerCase();
+                        return label.includes('back') || label.includes('rear') || label.includes('environment');
+                    });
+                    const initialCameraId =
+                        (savedId && activeDevices.some(d => d.id === savedId) && savedId) ||
+                        (preferredBack && preferredBack.id) ||
+                        activeDevices[0].id;
+
+                    setSelectedCamera(initialCameraId);
+                    await startScanner(initialCameraId);
+                } catch (err) {
+                    if (!ignore) {
+                        setError(err.message || 'Camera permission denied.');
+                        setScannerStatus('error');
+                    }
+                }
+            };
+
+            init();
+            return () => {
+                ignore = true;
+                stopScanner();
+            };
+        }, [startScanner, stopScanner]);
+
+        const handleCameraChange = async (e) => {
+            const nextCamera = e.target.value;
+            setSelectedCamera(nextCamera);
+            localStorage.setItem('snacks_menu_preferred_cam', nextCamera);
+            await startScanner(nextCamera);
+        };
+
+        const switchCamera = async () => {
+            if (cameras.length < 2) return;
+            const currentIndex = cameras.findIndex(c => c.id === selectedCamera);
+            const nextCamera = cameras[(currentIndex + 1) % cameras.length];
+            setSelectedCamera(nextCamera.id);
+            localStorage.setItem('snacks_menu_preferred_cam', nextCamera.id);
+            await startScanner(nextCamera.id);
+        };
+
+        return (
+            <div className="modal-overlay" onClick={onClose}>
+                <div className="card modal-card" onClick={e => e.stopPropagation()} style={{ maxWidth: '680px' }}>
+                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem'}}>
+                        <div>
+                            <h3 style={{fontWeight:800, color:'var(--text-main)', marginBottom:'0.25rem'}}>
+                                <i className="fas fa-camera mr-2" style={{color:'var(--primary)'}}></i>Internal Barcode Scanner
+                            </h3>
+                            <p style={{margin:0, color:'var(--text-muted)', fontSize:'0.9rem'}}>
+                                Scan directly into {targetLabel}. Supports product barcodes and dedicated handheld barcode labels.
+                            </p>
+                        </div>
+                        <button onClick={onClose} style={{background:'none', border:'none', fontSize:'1.5rem', cursor:'pointer', color:'var(--text-main)'}}>&times;</button>
+                    </div>
+
+                    <div style={{padding:'0.85rem 1rem', borderRadius:'0.9rem', border:'1px solid var(--border)', background:'var(--surface-solid)', marginBottom:'1rem', display:'flex', justifyContent:'space-between', alignItems:'center', gap:'1rem', flexWrap:'wrap'}}>
+                        <span style={{fontWeight:700, color:'var(--text-main)'}}>
+                            <i className="fas fa-barcode mr-2" style={{color:'var(--warning)'}}></i>
+                            {scannerStatus === 'ready' ? 'Scanner ready' : scannerStatus === 'scanned' ? 'Code captured' : scannerStatus === 'error' ? 'Scanner error' : 'Starting camera...'}
+                        </span>
+                        <span style={{color:'var(--text-muted)', fontSize:'0.85rem'}}>Point the camera at any barcode to fill the field automatically.</span>
+                    </div>
+
+                    <div id="snacks-menu-reader" style={{width:'100%', minHeight:'320px', borderRadius:'1rem', overflow:'hidden', background:'#000'}}></div>
+
+                    {error && (
+                        <div style={{marginTop:'1rem', padding:'1rem', borderRadius:'1rem', background:'var(--status-danger-bg)', color:'var(--status-danger-text)', border:'1px dashed var(--danger)'}}>
+                            <strong style={{display:'block', marginBottom:'0.4rem'}}>Camera access problem</strong>
+                            <span>{error}</span>
+                        </div>
+                    )}
+
+                    {!error && cameras.length > 0 && (
+                        <div style={{marginTop:'1rem', display:'flex', gap:'0.75rem', alignItems:'center'}}>
+                            <select
+                                value={selectedCamera}
+                                onChange={handleCameraChange}
+                                className="form-control"
+                                style={{background:'var(--input-bg)', color:'var(--text-main)', border:'1px solid var(--border)'}}
+                            >
+                                {cameras.map(camera => (
+                                    <option key={camera.id} value={camera.id}>
+                                        {camera.label || `Camera ${camera.id.substring(0, 4)}`}
+                                    </option>
+                                ))}
+                            </select>
+                            <button type="button" className="btn btn-warning" onClick={switchCamera} style={{borderRadius:'0.75rem', padding:'0 1rem'}}>
+                                <i className="fas fa-sync-alt"></i>
+                            </button>
+                            <button type="button" className="btn btn-secondary" onClick={onClose} style={{borderRadius:'0.75rem', padding:'0 1rem'}}>
+                                Close
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    };
 
     const ProductList = () => {
         const [items, setItems] = useState([]);
@@ -26,6 +227,7 @@
         const [repackFormData, setRepackFormData] = useState({
             num_packets: '', packet_size: '', retail_price: '', target_item_id: '', new_item_name: ''
         });
+        const [scannerTarget, setScannerTarget] = useState('');
 
         useEffect(() => {
             const html = document.documentElement;
@@ -220,6 +422,17 @@
             (i.barcode && i.barcode.includes(searchTerm))
         );
 
+        const openBarcodeScanner = (target) => setScannerTarget(target);
+        const closeBarcodeScanner = () => setScannerTarget('');
+        const applyScannedBarcode = (code) => {
+            if (scannerTarget === 'add') {
+                setFormData(prev => ({ ...prev, barcode: code }));
+            } else if (scannerTarget === 'edit') {
+                setEditItem(prev => prev ? ({ ...prev, barcode: code }) : prev);
+            }
+            closeBarcodeScanner();
+        };
+
         return (
             <div className="container" style={ {maxWidth: '96%', margin: '0 auto', overflowX: 'hidden'} }>
                 <style>{`
@@ -275,9 +488,14 @@
                             <div className="form-group" style={ {marginTop: '1rem'} }>
                                 <label style={ {fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between'} }>
                                     <span>Universal Barcode (Optional)</span>
-                                    <span style={ {cursor: 'pointer', color: 'var(--warning)'} } onClick={() => document.getElementById('add-barcode').focus()}>
-                                        <i className="fas fa-barcode"></i> Scan to Register
-                                    </span>
+                                    <div style={{display:'flex', gap:'0.75rem', alignItems:'center'}}>
+                                        <span style={ {cursor: 'pointer', color: 'var(--warning)'} } onClick={() => document.getElementById('add-barcode').focus()}>
+                                            <i className="fas fa-keyboard"></i> Scanner Input
+                                        </span>
+                                        <span style={ {cursor: 'pointer', color: 'var(--primary)', fontWeight: 800} } onClick={() => openBarcodeScanner('add')}>
+                                            <i className="fas fa-camera"></i> Internal Camera
+                                        </span>
+                                    </div>
                                 </label>
                                 <input type="text" id="add-barcode" value={formData.barcode} onChange={e => setFormData({...formData, barcode: e.target.value})} placeholder="Scan or type barcode" className="form-control" style={ {background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'} } />
                             </div>
@@ -556,9 +774,14 @@
                                 <div className="form-group" style={ {marginTop: '1rem'} }>
                                     <label style={ {fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between'} }>
                                         <span>Universal Barcode (Optional)</span>
-                                        <span style={ {cursor: 'pointer', color: 'var(--warning)'} } onClick={() => document.getElementById('edit-barcode').focus()}>
-                                            <i className="fas fa-barcode"></i> Scan to Register
-                                        </span>
+                                        <div style={{display:'flex', gap:'0.75rem', alignItems:'center'}}>
+                                            <span style={ {cursor: 'pointer', color: 'var(--warning)'} } onClick={() => document.getElementById('edit-barcode').focus()}>
+                                                <i className="fas fa-keyboard"></i> Scanner Input
+                                            </span>
+                                            <span style={ {cursor: 'pointer', color: 'var(--primary)', fontWeight: 800} } onClick={() => openBarcodeScanner('edit')}>
+                                                <i className="fas fa-camera"></i> Internal Camera
+                                            </span>
+                                        </div>
                                     </label>
                                     <input type="text" id="edit-barcode" value={editItem.barcode || ''} onChange={e => setEditItem({...editItem, barcode: e.target.value})} placeholder="Scan or type barcode" className="form-control" style={ {background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'} } />
                                 </div>
@@ -608,6 +831,14 @@
                             </form>
                         </div>
                     </div>
+                )}
+
+                {scannerTarget && (
+                    <BarcodeScannerModal
+                        targetLabel={scannerTarget === 'add' ? 'new product barcode' : 'existing product barcode'}
+                        onScan={applyScannedBarcode}
+                        onClose={closeBarcodeScanner}
+                    />
                 )}
                 
                 <div className="text-center mt-5">
