@@ -18,6 +18,8 @@
         --sheet-entry-border: var(--border);
         --sheet-input-bg: var(--card-bg);
         --sheet-input-text: var(--text-main);
+        --sheet-customer-divider: rgba(99,102,241,0.38);
+        --sheet-customer-divider-strong: rgba(99,102,241,0.58);
     }
     [data-theme="dark"] {
         --sheet-extra-header-bg: #0f2740;
@@ -33,6 +35,8 @@
         --sheet-entry-border: rgba(148, 163, 184, 0.35);
         --sheet-input-bg: #111827;
         --sheet-input-text: #f8fafc;
+        --sheet-customer-divider: rgba(129, 140, 248, 0.45);
+        --sheet-customer-divider-strong: rgba(165, 180, 252, 0.68);
     }
     .grid-page-header {
         display: flex;
@@ -85,6 +89,13 @@
         border: 1px solid var(--border); padding: 7px 9px;
         text-align: center; white-space: nowrap;
         vertical-align: middle; color: var(--text-main);
+    }
+    .customer-start-row td {
+        border-top: 2px solid var(--sheet-customer-divider);
+    }
+    .customer-start-row td.col-name,
+    .customer-start-row td.col-product {
+        border-top-color: var(--sheet-customer-divider-strong);
     }
     .ag-table thead th {
         position: sticky; top: 0; z-index: 50;
@@ -597,7 +608,11 @@ const AttendanceApp = () => {
                                         const n = parseFloat(v); return s + (isNaN(n) ? 0 : n);
                                     }, 0);
                                     return (
-                                        <tr key={`${cid}-${pid || pIdx}`} style={{borderBottom:'1px solid var(--border)'}}>
+                                        <tr
+                                            key={`${cid}-${pid || pIdx}`}
+                                            className={pIdx === 0 ? 'customer-start-row' : ''}
+                                            style={{borderBottom:'1px solid var(--border)'}}
+                                        >
                                             {pIdx === 0 && (
                                                 <td className="col-name" rowSpan={displayProds.length} style={{verticalAlign:'middle'}}>
                                                     <div style={{fontWeight:800, fontSize:'0.82rem'}}>
