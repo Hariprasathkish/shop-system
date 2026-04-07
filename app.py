@@ -1744,9 +1744,9 @@ def dairy_accounts_overview():
 
     for sid in all_staff_ids:
         if sid is None:
-            cur.execute("SELECT id, name, service_charge, last_bill_generated_on, net_payable, billing_type, last_bill_amount FROM dairy_customers WHERE delivery_staff_id IS NULL")
+            cur.execute("SELECT id, name, service_charge, last_bill_generated_on, net_payable, billing_type, last_bill_amount FROM dairy_customers WHERE delivery_staff_id IS NULL ORDER BY delivery_order ASC, id ASC")
         else:
-            cur.execute("SELECT id, name, service_charge, last_bill_generated_on, net_payable, billing_type, last_bill_amount FROM dairy_customers WHERE delivery_staff_id = %s", (sid,))
+            cur.execute("SELECT id, name, service_charge, last_bill_generated_on, net_payable, billing_type, last_bill_amount FROM dairy_customers WHERE delivery_staff_id = %s ORDER BY delivery_order ASC, id ASC", (sid,))
         
         customers = cur.fetchall()
         if not customers and sid is not None:
@@ -1758,7 +1758,13 @@ def dairy_accounts_overview():
             "id": sid,
             "name": staff_names[sid],
             "customers": [],
-            "totals": {"bill": 0.0, "arrears": 0.0, "cash": 0.0, "online": 0.0, "balance": 0.0}
+            "totals": {
+                "bill": 0.0, "arrears": 0.0, "cash": 0.0, "online": 0.0, "balance": 0.0,
+                "qty": 0.0,
+                "reservation_count": 0, "reservation_qty": 0.0,
+                "current_month_count": 0, "current_month_qty": 0.0,
+                "month_end_count": 0, "month_end_qty": 0.0,
+            }
         }
         
         for cid, cname, service_charge, last_gen, net_payable, billing_type, last_bill_amount in customers:
@@ -1886,16 +1892,17 @@ def dairy_accounts_overview():
                 "products": cust_products_list, 
                 "extras": extras_list,
                 "fixed_qty_sum": fixed_qty_sum,
+                "daily_qty": fixed_qty_sum,
                 "service_charge": service_charge,
                 "service_bill": float(service_charge or 0) * fixed_qty_sum,
                 "current_bill": current_bill,
                 "arrears": arrears,
-                "bill": current_bill + arrears, # Total shown in "Total Bill" column if we keep it
+                "bill": current_bill + arrears,
                 "paid": paid_amount,
                 "mode": mode,
                 "balance": balance,
-                "last_gen": last_gen,           # raw last generation date
-                "last_gen_in_month": last_gen_in_month,  # relevant for selected month only
+                "last_gen": last_gen,
+                "last_gen_in_month": last_gen_in_month,
                 "billing_type": btype,
                 "cycle_label": cycle_label,
                 "billing_cycle_desc": billing_cycle_desc,
@@ -1909,6 +1916,17 @@ def dairy_accounts_overview():
             staff_entry["totals"]["cash"] = float(staff_entry["totals"]["cash"]) + float(cash_paid or 0)
             staff_entry["totals"]["online"] = float(staff_entry["totals"]["online"]) + float(online_paid or 0)
             staff_entry["totals"]["balance"] = float(staff_entry["totals"]["balance"]) + float(balance or 0)
+            # Update cycle-based totals
+            staff_entry["totals"]["qty"] = float(staff_entry["totals"]["qty"]) + float(fixed_qty_sum)
+            if cycle_label == 'R':
+                staff_entry["totals"]["reservation_count"] += 1
+                staff_entry["totals"]["reservation_qty"] = float(staff_entry["totals"]["reservation_qty"]) + float(fixed_qty_sum)
+            elif cycle_label == 'CM':
+                staff_entry["totals"]["current_month_count"] += 1
+                staff_entry["totals"]["current_month_qty"] = float(staff_entry["totals"]["current_month_qty"]) + float(fixed_qty_sum)
+            elif cycle_label == 'M':
+                staff_entry["totals"]["month_end_count"] += 1
+                staff_entry["totals"]["month_end_qty"] = float(staff_entry["totals"]["month_end_qty"]) + float(fixed_qty_sum)
             
             # Update grand totals
             grand_totals["bill"] = float(grand_totals["bill"]) + float(current_bill or 0)

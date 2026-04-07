@@ -200,10 +200,44 @@
 
     {% for staff in staff_data %}
     <div class="staff-section">
-        <div class="staff-header">
-            <h2><i class="fas fa-truck"></i> {{ staff.name }}</h2>
-            <div style="font-size: 0.9rem;">
-                Customers: {{ staff.customers|length }}
+        <div class="staff-header" style="flex-wrap: wrap; gap: 10px;">
+            <h2 style="flex: 0 0 auto;"><i class="fas fa-truck"></i> {{ staff.name }}</h2>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; flex: 1 1 auto; justify-content: flex-end;">
+
+                <!-- Total Customers -->
+                <span style="background: rgba(255,255,255,0.18); border-radius: 6px; padding: 5px 12px; font-size: 0.8rem; font-weight: 700; white-space: nowrap;">
+                    <i class="fas fa-users"></i> {{ staff.customers|length }} Customers
+                </span>
+
+                <!-- Total Milk -->
+                <span style="background: rgba(255,255,255,0.18); border-radius: 6px; padding: 5px 12px; font-size: 0.8rem; font-weight: 700; white-space: nowrap;">
+                    <i class="fas fa-tint"></i> {{ "%.2f"|format(staff.totals.qty) }} qty
+                </span>
+
+                <!-- Reservation -->
+                {% if staff.totals.reservation_count > 0 %}
+                <span style="background: #f59e0b; color: #fff; border-radius: 6px; padding: 5px 12px; font-size: 0.78rem; font-weight: 700; white-space: nowrap;" title="Reservation cycle customers">
+                    <span style="font-size:0.7rem; font-weight:900; background:rgba(0,0,0,0.15); border-radius:3px; padding:1px 5px; margin-right:4px;">R</span>
+                    {{ staff.totals.reservation_count }} cust &bull; {{ "%.2f"|format(staff.totals.reservation_qty) }} qty
+                </span>
+                {% endif %}
+
+                <!-- Current Month -->
+                {% if staff.totals.current_month_count > 0 %}
+                <span style="background: #10b981; color: #fff; border-radius: 6px; padding: 5px 12px; font-size: 0.78rem; font-weight: 700; white-space: nowrap;" title="Current Month cycle customers">
+                    <span style="font-size:0.7rem; font-weight:900; background:rgba(0,0,0,0.15); border-radius:3px; padding:1px 5px; margin-right:4px;">CM</span>
+                    {{ staff.totals.current_month_count }} cust &bull; {{ "%.2f"|format(staff.totals.current_month_qty) }} qty
+                </span>
+                {% endif %}
+
+                <!-- Month End -->
+                {% if staff.totals.month_end_count > 0 %}
+                <span style="background: #3b82f6; color: #fff; border-radius: 6px; padding: 5px 12px; font-size: 0.78rem; font-weight: 700; white-space: nowrap;" title="Month End cycle customers">
+                    <span style="font-size:0.7rem; font-weight:900; background:rgba(0,0,0,0.15); border-radius:3px; padding:1px 5px; margin-right:4px;">M</span>
+                    {{ staff.totals.month_end_count }} cust &bull; {{ "%.2f"|format(staff.totals.month_end_qty) }} qty
+                </span>
+                {% endif %}
+
             </div>
         </div>
 
