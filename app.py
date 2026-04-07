@@ -753,10 +753,16 @@ def snacks_menu():
 
         return redirect("/snacks")
 
-    cur.execute("SELECT id, name, purchase_price, retail_price, wholesale_price, stock, image_url FROM snacks_menu ORDER BY id ASC")
-    items = cur.fetchall()
-    conn.close()
-    return render_template("snacks/snacks_menu.html", items=items)
+    try:
+        cur.execute("SELECT id, name, purchase_price, retail_price, wholesale_price, stock, image_url, unit_size, is_bulk, barcode FROM snacks_menu ORDER BY id ASC")
+        items = cur.fetchall()
+        conn.close()
+        return render_template("snacks/snacks_menu.html", items=items)
+    except Exception as e:
+        if conn:
+            conn.close()
+        flash(f"Snacks Menu error: {str(e)}", "danger")
+        return render_template("snacks/snacks_menu.html", items=[])
 
 
 @app.route("/snacks/barcode/<int:item_id>")
@@ -825,13 +831,18 @@ def api_snacks_products():
     cur = conn.cursor()
 
     if request.method == "GET":
-        from psycopg2.extras import RealDictCursor
-        cur.close()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT id, name, purchase_price, retail_price, wholesale_price, stock, image_url, unit_size, is_bulk, barcode FROM snacks_menu ORDER BY id ASC")
-        items = cur.fetchall()
-        conn.close()
-        return jsonify(items)
+        try:
+            from psycopg2.extras import RealDictCursor
+            cur.close()
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT id, name, purchase_price, retail_price, wholesale_price, stock, image_url, unit_size, is_bulk, barcode FROM snacks_menu ORDER BY id ASC")
+            items = cur.fetchall()
+            conn.close()
+            return jsonify(items)
+        except Exception as e:
+            if conn:
+                conn.close()
+            return jsonify({"error": str(e)}), 500
 
     elif request.method == "POST":
         name = request.form.get("name")
@@ -1768,6 +1779,7 @@ def dairy_accounts_overview():
                 "reservation_count": 0, "reservation_qty": 0.0,
                 "current_month_count": 0, "current_month_qty": 0.0,
                 "month_end_count": 0, "month_end_qty": 0.0,
+                "products": {}
             }
         }
         
@@ -1872,6 +1884,11 @@ def dairy_accounts_overview():
                 cust_products_list.append({"name": pname, "qty": f"{qty_val} x {num_days_in_month}d", "rate": price_val, "bill": amt})
                 fixed_qty_sum += qty_val
                 base_total += amt
+                
+                # Product-wise totals per staff
+                if pname not in staff_entry["totals"]["products"]:
+                    staff_entry["totals"]["products"][pname] = 0.0
+                staff_entry["totals"]["products"][pname] += qty_val
 
             # 2. Extras (Actual deviations)
             # This is hard to calculate exactly without full bill logic, 
@@ -2343,6 +2360,19 @@ def manage_products():
     conn.close()
     return render_template("dairy/manage_products.html", products=products)
 
+def normalize_customer_order(cur):
+    """Ensures delivery_order values are perfectly contiguous (1, 2, 3...) for all dairy_customers."""
+    try:
+        cur.execute("SELECT id, delivery_order FROM dairy_customers ORDER BY delivery_order ASC, id ASC")
+        customers = cur.fetchall()
+        for index, customer in enumerate(customers):
+            new_order = index + 1
+            curr_order = customer[1]
+            if new_order != curr_order:
+                cur.execute("UPDATE dairy_customers SET delivery_order = %s WHERE id = %s", (new_order, customer[0]))
+    except Exception as e:
+        print(f"Error normalizing customer order: {e}")
+
 # ------------------ CUSTOMER MANAGEMENT ------------------
 @app.route("/dairy/customers", methods=["GET", "POST"])
 def manage_customers():
@@ -2365,8 +2395,13 @@ def manage_customers():
 
         if action == "add":
             try:
-                # Reordering Logic
-                new_order = int(get_val("delivery_order", 9999))
+                # Get intended delivery order
+                try:
+                    new_order = int(get_val("delivery_order", 9999))
+                except (ValueError, TypeError):
+                    new_order = 9999
+
+                # Shift existing slots down to make room for new customer
                 cur.execute("UPDATE dairy_customers SET delivery_order = delivery_order + 1 WHERE delivery_order >= %s", (new_order,))
                 
                 # Insert Customer
@@ -2401,6 +2436,9 @@ def manage_customers():
                             VALUES (%s, %s, %s, %s, %s)
                         """, (new_customer_id, prod_names[i], prod_qtys[i] or 0, prod_prices[i] or 0, i))
                 
+                # Final normalization step to fix any gaps
+                normalize_customer_order(cur)
+
                 conn.commit()
             except Exception as e:
                 print("Error adding customer:", e)
@@ -2409,7 +2447,10 @@ def manage_customers():
         elif action == "edit":
             try:
                 cust_id = get_val("customer_id")
-                new_order = int(get_val("delivery_order", 9999))
+                try:
+                    new_order = int(get_val("delivery_order", 9999))
+                except (ValueError, TypeError):
+                    new_order = 9999
                 
                 # Slot Reordering Logic
                 cur.execute("SELECT delivery_order FROM dairy_customers WHERE id=%s", (cust_id,))
@@ -2471,6 +2512,9 @@ def manage_customers():
                             VALUES (%s, %s, %s, %s, %s)
                         """, (cust_id, prod_names[i], prod_qtys[i] or 0, prod_prices[i] or 0, i))
 
+                # Final mathematical normalization
+                normalize_customer_order(cur)
+
                 conn.commit()
             except Exception as e:
                 print("Error editing customer:", e)
@@ -2494,6 +2538,10 @@ def manage_customers():
                 cur.execute("DELETE FROM dairy_extra_notes WHERE customer_id=%s", (cid,))
                 cur.execute("DELETE FROM customer_products WHERE customer_id=%s", (cid,))
                 cur.execute("DELETE FROM dairy_customers WHERE id=%s", (cid,))
+                
+                # Final normalization step to close any gaps and fix sequencing
+                normalize_customer_order(cur)
+                
                 conn.commit()
                 flash("Customer and all related data purged successfully.", "success")
             except Exception as e:
