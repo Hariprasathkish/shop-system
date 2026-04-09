@@ -4,6 +4,8 @@
 <div id="root"></div>
 {% endblock %}
 
+{% block scripts %}
+<script src="https://unpkg.com/html5-qrcode"></script>
 <script>
     window.csrfToken = "{{ csrf_token() }}";
 </script>
