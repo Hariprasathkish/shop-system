@@ -1,0 +1,855 @@
+const { useState, useEffect, useRef, useCallback } = React;
+
+const BarcodeScannerModal = ({ targetLabel, onScan, onClose }) => {
+    const [cameras, setCameras] = useState([]);
+    const [selectedCamera, setSelectedCamera] = useState('');
+    const [error, setError] = useState('');
+    const [scannerStatus, setScannerStatus] = useState('starting');
+    const html5QrCodeRef = useRef(null);
+
+    const playBeep = () => {
+        try {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
+            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.15);
+            setTimeout(() => audioCtx.close(), 200);
+        } catch (e) {}
+    };
+
+    const stopScanner = useCallback(async () => {
+        if (html5QrCodeRef.current) {
+            try {
+                await html5QrCodeRef.current.stop();
+            } catch (e) {}
+            try {
+                await html5QrCodeRef.current.clear();
+            } catch (e) {}
+        }
+    }, []);
+
+    const startScanner = useCallback(async (cameraId) => {
+        if (!html5QrCodeRef.current || !cameraId) return;
+        setError('');
+        setScannerStatus('starting');
+        try {
+            const formats = [
+                window.Html5QrcodeSupportedFormats?.QR_CODE,
+                window.Html5QrcodeSupportedFormats?.CODE_128,
+                window.Html5QrcodeSupportedFormats?.EAN_13,
+                window.Html5QrcodeSupportedFormats?.EAN_8,
+                window.Html5QrcodeSupportedFormats?.UPC_A,
+                window.Html5QrcodeSupportedFormats?.UPC_E,
+                window.Html5QrcodeSupportedFormats?.CODE_39
+            ].filter(v => v !== undefined);
+
+            if (html5QrCodeRef.current.getState && html5QrCodeRef.current.getState() === 2) {
+                await html5QrCodeRef.current.stop();
+            }
+
+            await html5QrCodeRef.current.start(
+                cameraId,
+                {
+                    fps: 20,
+                    qrbox: { width: 280, height: 180 },
+                    aspectRatio: 1,
+                    formatsToSupport: formats
+                },
+                (decodedText) => {
+                    if (!decodedText) return;
+                    setScannerStatus('scanned');
+                    playBeep();
+                    if (navigator.vibrate) navigator.vibrate(120);
+                    onScan(decodedText.trim());
+                }
+            );
+            setScannerStatus('ready');
+        } catch (err) {
+            console.error('Snack menu scanner error:', err);
+            setError('Could not start the camera scanner. Please allow camera access and try again.');
+            setScannerStatus('error');
+        }
+    }, [onScan]);
+
+    useEffect(() => {
+        let ignore = false;
+        const init = async () => {
+            try {
+                html5QrCodeRef.current = new Html5Qrcode('snacks-menu-reader');
+                const devices = await Html5Qrcode.getCameras();
+                if (ignore) return;
+
+                if (!devices || devices.length === 0) {
+                    setError('No internal camera was found on this device.');
+                    setScannerStatus('error');
+                    return;
+                }
+
+                const filtered = devices.filter(d =>
+                    !(d.label || '').toLowerCase().includes('virtual') &&
+                    !(d.label || '').toLowerCase().includes('droidcam')
+                );
+                const activeDevices = filtered.length > 0 ? filtered : devices;
+                setCameras(activeDevices);
+
+                const savedId = localStorage.getItem('snacks_menu_preferred_cam');
+                const preferredBack = activeDevices.find(d => {
+                    const label = (d.label || '').toLowerCase();
+                    return label.includes('back') || label.includes('rear') || label.includes('environment');
+                });
+                const initialCameraId =
+                    (savedId && activeDevices.some(d => d.id === savedId) && savedId) ||
+                    (preferredBack && preferredBack.id) ||
+                    activeDevices[0].id;
+
+                setSelectedCamera(initialCameraId);
+                await startScanner(initialCameraId);
+            } catch (err) {
+                if (!ignore) {
+                    setError(err.message || 'Camera permission denied.');
+                    setScannerStatus('error');
+                }
+            }
+        };
+
+        init();
+        return () => {
+            ignore = true;
+            stopScanner();
+        };
+    }, [startScanner, stopScanner]);
+
+    const handleCameraChange = async (e) => {
+        const nextCamera = e.target.value;
+        setSelectedCamera(nextCamera);
+        localStorage.setItem('snacks_menu_preferred_cam', nextCamera);
+        await startScanner(nextCamera);
+    };
+
+    const switchCamera = async () => {
+        if (cameras.length < 2) return;
+        const currentIndex = cameras.findIndex(c => c.id === selectedCamera);
+        const nextCamera = cameras[(currentIndex + 1) % cameras.length];
+        setSelectedCamera(nextCamera.id);
+        localStorage.setItem('snacks_menu_preferred_cam', nextCamera.id);
+        await startScanner(nextCamera.id);
+    };
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="card modal-card" onClick={e => e.stopPropagation()} style={{ maxWidth: '680px' }}>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem'}}>
+                    <div>
+                        <h3 style={{fontWeight:800, color:'var(--text-main)', marginBottom:'0.25rem'}}>
+                            <i className="fas fa-camera mr-2" style={{color:'var(--primary)'}}></i>Internal Barcode Scanner
+                        </h3>
+                        <p style={{margin:0, color:'var(--text-muted)', fontSize:'0.9rem'}}>
+                            Scan directly into {targetLabel}. Supports product barcodes and dedicated handheld barcode labels.
+                        </p>
+                    </div>
+                    <button onClick={onClose} style={{background:'none', border:'none', fontSize:'1.5rem', cursor:'pointer', color:'var(--text-main)'}}>&times;</button>
+                </div>
+
+                <div style={{padding:'0.85rem 1rem', borderRadius:'0.9rem', border:'1px solid var(--border)', background:'var(--surface-solid)', marginBottom:'1rem', display:'flex', justifyContent:'space-between', alignItems:'center', gap:'1rem', flexWrap:'wrap'}}>
+                    <span style={{fontWeight:700, color:'var(--text-main)'}}>
+                        <i className="fas fa-barcode mr-2" style={{color:'var(--warning)'}}></i>
+                        {scannerStatus === 'ready' ? 'Scanner ready' : scannerStatus === 'scanned' ? 'Code captured' : scannerStatus === 'error' ? 'Scanner error' : 'Starting camera...'}
+                    </span>
+                    <span style={{color:'var(--text-muted)', fontSize:'0.85rem'}}>Point the camera at any barcode to fill the field automatically.</span>
+                </div>
+
+                <div id="snacks-menu-reader" style={{width:'100%', minHeight:'320px', borderRadius:'1rem', overflow:'hidden', background:'#000'}}></div>
+
+                {error && (
+                    <div style={{marginTop:'1rem', padding:'1rem', borderRadius:'1rem', background:'var(--status-danger-bg)', color:'var(--status-danger-text)', border:'1px dashed var(--danger)'}}>
+                        <strong style={{display:'block', marginBottom:'0.4rem'}}>Camera access problem</strong>
+                        <span>{error}</span>
+                    </div>
+                )}
+
+                {!error && cameras.length > 0 && (
+                    <div style={{marginTop:'1rem', display:'flex', gap:'0.75rem', alignItems:'center'}}>
+                        <select
+                            value={selectedCamera}
+                            onChange={handleCameraChange}
+                            className="form-control"
+                            style={{background:'var(--input-bg)', color:'var(--text-main)', border:'1px solid var(--border)'}}
+                        >
+                            {cameras.map(camera => (
+                                <option key={camera.id} value={camera.id}>
+                                    {camera.label || `Camera ${camera.id.substring(0, 4)}`}
+                                </option>
+                            ))}
+                        </select>
+                        <button type="button" className="btn btn-warning" onClick={switchCamera} style={{borderRadius:'0.75rem', padding:'0 1rem'}}>
+                            <i className="fas fa-sync-alt"></i>
+                        </button>
+                        <button type="button" className="btn btn-secondary" onClick={onClose} style={{borderRadius:'0.75rem', padding:'0 1rem'}}>
+                            Close
+                        </button>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+const ProductList = () => {
+    const [items, setItems] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editItem, setEditItem] = useState(null);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [formData, setFormData] = useState({
+        name: '', purchase_price: '', retail_price: '', wholesale_price: '', stock: '', unit_size: '1kg', is_bulk: true, barcode: '', image: null, preview: null
+    });
+    const [editPreview, setEditPreview] = useState(null);
+    const [editRemoveImage, setEditRemoveImage] = useState(false);
+
+    // Repacking State
+    const [showRepackModal, setShowRepackModal] = useState(false);
+    const [repackBulkItem, setRepackBulkItem] = useState(null);
+    const [repackFormData, setRepackFormData] = useState({
+        num_packets: '', packet_size: '', retail_price: '', target_item_id: '', new_item_name: ''
+    });
+    const [scannerTarget, setScannerTarget] = useState('');
+
+    useEffect(() => {
+        const html = document.documentElement;
+        const body = document.body;
+        if (showEditModal) {
+            html.classList.add('modal-open');
+            body.classList.add('modal-open');
+        } else {
+            html.classList.remove('modal-open');
+            body.classList.remove('modal-open');
+        }
+        return () => {
+            html.classList.remove('modal-open');
+            body.classList.remove('modal-open');
+        };
+    }, [showEditModal]);
+
+    useEffect(() => { fetchItems(); }, []);
+
+    const fetchItems = async () => {
+        setLoading(true);
+        try {
+            const res = await fetch('/api/snacks/products');
+            const data = await res.json();
+            setItems(data);
+        } catch (err) { console.error("Error fetching items:", err); }
+        setLoading(false);
+    };
+
+    // Helper to check if value exists (including zero)
+    const hasValue = (v) => v !== '' && v !== null && v !== undefined;
+
+    // Check if add form is complete
+    const isAddComplete = formData.name && hasValue(formData.purchase_price) && hasValue(formData.retail_price) && hasValue(formData.wholesale_price) && hasValue(formData.stock) && formData.unit_size;
+
+    // Check if edit form is complete
+    const isEditComplete = editItem && editItem.name && hasValue(editItem.purchase_price) && hasValue(editItem.retail_price) && hasValue(editItem.wholesale_price) && hasValue(editItem.stock) && editItem.unit_size;
+
+    const handleAdd = async (e) => {
+        e.preventDefault();
+        const data = new FormData();
+        data.append('name', formData.name);
+        data.append('purchase_price', formData.purchase_price);
+        data.append('retail_price', formData.retail_price);
+        data.append('wholesale_price', formData.wholesale_price);
+        data.append('stock', formData.stock);
+        data.append('unit_size', formData.unit_size);
+        data.append('is_bulk', formData.is_bulk);
+        data.append('barcode', formData.barcode);
+        if (formData.image) data.append('image', formData.image);
+
+        const csrfToken = window.csrfToken;
+        try {
+            const res = await fetch('/api/snacks/products', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken },
+                body: data
+            });
+            if (res.ok) {
+                setFormData({ name: '', purchase_price: '', retail_price: '', wholesale_price: '', stock: '', unit_size: '1kg', is_bulk: true, barcode: '', image: null, preview: null });
+                const fileInput = document.getElementById('add-image-input');
+                if(fileInput) fileInput.value = "";
+                fetchItems();
+            } else {
+                const errData = await res.json();
+                alert(errData.error || "Failed to add product");
+            }
+        } catch (err) { console.error("Error adding item:", err); }
+    };
+
+    const handleEdit = async (e) => {
+        e.preventDefault();
+        const data = new FormData();
+        data.append('id', editItem.id);
+        data.append('name', editItem.name);
+        data.append('purchase_price', editItem.purchase_price);
+        data.append('retail_price', editItem.retail_price);
+        data.append('wholesale_price', editItem.wholesale_price);
+        data.append('stock', editItem.stock);
+        data.append('unit_size', editItem.unit_size);
+        data.append('is_bulk', editItem.is_bulk);
+        data.append('barcode', editItem.barcode || '');
+        if (editRemoveImage) {
+            data.append('remove_image', 'true');
+        } else if (editItem.image) {
+            data.append('image', editItem.image);
+        }
+
+        const csrfToken = window.csrfToken;
+        try {
+            const res = await fetch('/api/snacks/products', {
+                method: 'PUT',
+                headers: { 'X-CSRFToken': csrfToken },
+                body: data
+            });
+            if (res.ok) {
+                setShowEditModal(false);
+                setEditRemoveImage(false);
+                fetchItems();
+            } else {
+                const errData = await res.json();
+                alert(errData.error || "Failed to update product");
+            }
+        } catch (err) { console.error("Error updating item:", err); }
+    };
+
+    const handleDelete = async (id, name) => {
+        if (!confirm(`Delete ${name}?`)) return;
+        const csrfToken = window.csrfToken;
+        try {
+            const res = await fetch(`/api/snacks/products?id=${id}`, {
+                method: 'DELETE',
+                headers: { 'X-CSRFToken': csrfToken }
+            });
+            if (res.ok) fetchItems();
+        } catch (err) { console.error("Error deleting item:", err); }
+    };
+
+    const openEdit = (item) => {
+        setEditItem({ ...item });
+        setEditPreview(item.image_url);
+        setEditRemoveImage(false);
+        setShowEditModal(true);
+    };
+
+    const handleImageChange = (e, target) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        if (target === 'add') {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setFormData({ ...formData, image: file, preview: reader.result });
+            };
+            reader.readAsDataURL(file);
+        } else {
+            setEditItem({ ...editItem, image: file });
+            setEditRemoveImage(false);
+        }
+    };
+
+    const removeAddImage = () => {
+        setFormData({ ...formData, image: null, preview: null });
+        const fileInput = document.getElementById('add-image-input');
+        if (fileInput) fileInput.value = "";
+    };
+
+    const removeEditImage = () => {
+        setEditItem({ ...editItem, image: null });
+        setEditRemoveImage(true);
+        const fileInput = document.getElementById('edit-image-input');
+        if (fileInput) fileInput.value = "";
+    };
+
+    const openRepack = (item) => {
+        setRepackBulkItem(item);
+        setRepackFormData({
+            num_packets: '', packet_size: '', retail_price: '', target_item_id: '', new_item_name: `${item.name} Repacked`
+        });
+        setShowRepackModal(true);
+    };
+
+    const handleRepackSubmit = async (e) => {
+        e.preventDefault();
+        const data = new FormData();
+        data.append('bulk_item_id', repackBulkItem.id);
+        data.append('num_packets', repackFormData.num_packets);
+        data.append('packet_size', repackFormData.packet_size);
+        data.append('retail_price', repackFormData.retail_price);
+        data.append('new_item_name', repackFormData.new_item_name);
+        data.append('repacked_item_id', repackFormData.target_item_id);
+
+        const csrfToken = window.csrfToken;
+        try {
+            const res = await fetch('/api/snacks/repack', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken },
+                body: data
+            });
+            if (res.ok) {
+                setShowRepackModal(false);
+                fetchItems();
+            } else {
+                const errData = await res.json();
+                alert(errData.error || "Failed to repack");
+            }
+        } catch (err) { console.error("Error repacking:", err); }
+    };
+
+    const filteredItems = items.filter(i => 
+        i.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        (i.barcode && i.barcode.includes(searchTerm))
+    );
+
+    const openBarcodeScanner = (target) => setScannerTarget(target);
+    const closeBarcodeScanner = () => setScannerTarget('');
+    const applyScannedBarcode = (code) => {
+        if (scannerTarget === 'add') {
+            setFormData(prev => ({ ...prev, barcode: code }));
+        } else if (scannerTarget === 'edit') {
+            setEditItem(prev => prev ? ({ ...prev, barcode: code }) : prev);
+        }
+        closeBarcodeScanner();
+    };
+
+    return (
+        <div className="container" style={{maxWidth: '96%', margin: '0 auto', overflowX: 'hidden'}}>
+            <style>{`
+                .product-card { display: flex; align-items: center; justify-content: space-between; padding: 1.25rem 1.5rem; border-radius: 1.5rem; background: var(--card-bg); border: 1px solid var(--border); margin-bottom: 1rem; transition: transform 0.2s, box-shadow 0.2s; box-shadow: var(--shadow-sm); }
+                .product-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+                .badge-stock { padding: 4px 12px; border-radius: 99px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+                .badge-ok { background: var(--status-success-bg); color: var(--status-success-text); border: 1px solid var(--border); }
+                .badge-low { background: var(--status-warning-bg); color: var(--status-warning-text); border: 1px solid var(--border); }
+                .badge-zero { background: var(--status-danger-bg); color: var(--status-danger-text); border: 1px solid var(--border); }
+                .price-pill { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 99px; font-size: 0.75rem; font-weight: 700; margin-right: 6px; }
+                .pill-retail { background: var(--status-info-bg); color: var(--status-info-text); }
+                .pill-wholesale { background: var(--status-info-bg); opacity: 0.9; color: var(--status-info-text); }
+                .pill-purchase { background: var(--status-success-bg); color: var(--status-success-text); }
+                .pill-unit { background: var(--surface-solid); color: var(--text-main); border: 1px solid var(--border); }
+                .modal-overlay { 
+                    position: fixed; 
+                    inset: 0; 
+                    background: rgba(0, 0, 0, 0.7); 
+                    backdrop-filter: blur(4px); 
+                    z-index: 1000; 
+                    overflow-y: auto; 
+                    display: block; 
+                    padding: 4rem 1rem; 
+                    animation: fadeIn 0.3s; 
+                    overscroll-behavior: contain;
+                }
+                .card-add { position: sticky; top: 1rem; }
+                .image-preview { width: 100%; height: 160px; border-radius: 12px; border: 2px dashed var(--border); display: flex; align-items: center; justify-content: center; margin-top: 10px; overflow: hidden; background: var(--surface-solid); position: relative; }
+                .image-preview img { width: 100%; height: 100%; object-fit: cover; }
+                .remove-img-btn { position: absolute; top: 6px; right: 6px; background: rgba(220,38,38,0.85); color: white; border: none; border-radius: 50%; width: 28px; height: 28px; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center; z-index: 2; transition: background 0.2s; }
+                .remove-img-btn:hover { background: rgb(185,28,28); }
+                .btn-save-complete { background: #2563eb !important; color: white !important; border-color: #2563eb !important; transition: background 0.3s, transform 0.1s; }
+                .btn-save-complete:hover { background: #1d4ed8 !important; }
+                .modal-card { width: 500px; max-width: 95vw; background: var(--card-bg); border: 1px solid var(--border); margin: 0 auto; position: relative; }
+                body.modal-open, html.modal-open { overflow: hidden !important; height: 100% !important; }
+                @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+            `}</style>
+
+            <div style={{textAlign: 'center', marginBottom: '3rem'}}>
+                <h1 style={{fontSize: '3rem', fontWeight: '800', background: 'linear-gradient(135deg, var(--warning), var(--accent))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: '0.5rem'}}>Product Catalogue</h1>
+                <p style={{color: 'var(--text-muted)'}}>Dynamic Management Dashboard</p>
+            </div>
+
+            <div className="grid-2" style={{gridTemplateColumns: '380px minmax(0, 1fr)', alignItems: 'start', gap: '2.5rem', width: '100%', maxWidth: '100vw'}}>
+                {/* Add Product Form */}
+                <div className="card card-add" style={{background: 'var(--card-bg)', border: '1px solid var(--border)', position: 'sticky', top: '1rem', zIndex: 10}}>
+                    <h3 style={{fontWeight: 800, marginBottom: '1.5rem', color: 'var(--text-main)'}}><i className="fas fa-plus-circle" style={{color:'var(--warning)', marginRight: '10px'}}></i>Add Product</h3>
+                    <form onSubmit={handleAdd}>
+                        <div className="form-group">
+                            <label style={{fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-muted)'}}>Product Name</label>
+                            <input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="e.g. Potato Chips 50g" className="form-control" style={{background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'}} required />
+                        </div>
+                        <div className="form-group" style={{marginTop: '1rem'}}>
+                            <label style={{fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between'}}>
+                                <span>Universal Barcode (Optional)</span>
+                                <div style={{display:'flex', gap:'0.75rem', alignItems:'center'}}>
+                                    <span style={{cursor: 'pointer', color: 'var(--warning)'}} onClick={() => document.getElementById('add-barcode').focus()}>
+                                        <i className="fas fa-keyboard"></i> Scanner Input
+                                    </span>
+                                    <span style={{cursor: 'pointer', color: 'var(--primary)', fontWeight: 800}} onClick={() => openBarcodeScanner('add')}>
+                                        <i className="fas fa-camera"></i> Internal Camera
+                                    </span>
+                                </div>
+                            </label>
+                            <input type="text" id="add-barcode" value={formData.barcode} onChange={e => setFormData({...formData, barcode: e.target.value})} placeholder="Scan or type barcode" className="form-control" style={{background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'}} />
+                        </div>
+                        <div className="grid-2" style={{gap: '1rem', marginTop: '1rem'}}>
+                            <div className="form-group">
+                                <label style={{fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-muted)'}}>Retail (₹)</label>
+                                <input type="number" step="0.01" value={formData.retail_price} onChange={e => setFormData({...formData, retail_price: e.target.value})} placeholder="MRP" className="form-control" style={{background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'}} required />
+                            </div>
+                            <div className="form-group">
+                                <label style={{fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-muted)'}}>Purchase (₹)</label>
+                                <input type="number" step="0.01" value={formData.purchase_price} onChange={e => setFormData({...formData, purchase_price: e.target.value})} placeholder="Cost" className="form-control" style={{background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'}} required />
+                            </div>
+                        </div>
+                        <div className="grid-2" style={{gap: '1rem', marginTop: '1rem'}}>
+                            <div className="form-group">
+                                <label style={{fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-muted)'}}>Wholesale (₹)</label>
+                                <input type="number" step="0.01" value={formData.wholesale_price} onChange={e => setFormData({...formData, wholesale_price: e.target.value})} placeholder="Bulk" className="form-control" style={{background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'}} required />
+                            </div>
+                            <div className="form-group">
+                                <label style={{fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-muted)'}}>Stock (qty)</label>
+                                <input type="number" value={formData.stock} onChange={e => setFormData({...formData, stock: e.target.value})} placeholder="0" className="form-control" style={{background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'}} required />
+                            </div>
+                        </div>
+                        <div className="grid-2" style={{gap: '1rem', marginTop: '1rem'}}>
+                            <div className="form-group">
+                                <label style={{fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-muted)'}}>Unit Size</label>
+                                <input type="text" value={formData.unit_size} onChange={e => setFormData({...formData, unit_size: e.target.value})} placeholder="e.g. 1kg, 200g" className="form-control" style={{background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'}} required />
+                            </div>
+                            <div className="form-group" style={{display: 'flex', alignItems: 'center', gap: '10px', height: '100%', paddingTop: '25px'}}>
+                                <input type="checkbox" checked={formData.is_bulk} onChange={e => setFormData({...formData, is_bulk: e.target.checked})} id="add-is-bulk" />
+                                <label htmlFor="add-is-bulk" style={{fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-muted)', cursor: 'pointer', margin: 0}}>Is Main Stock (Bulk)</label>
+                            </div>
+                        </div>
+                        <div className="form-group" style={{marginTop: '1rem'}}>
+                            <label style={{fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-muted)'}}>Product Image (Optional, max 2MB)</label>
+                            <input type="file" id="add-image-input" accept="image/*" onChange={e => handleImageChange(e, 'add')} className="form-control" style={{background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', padding: '10px'}} />
+                            {formData.preview && (
+                                <div className="image-preview">
+                                    <img src={formData.preview} alt="Preview" />
+                                    <button type="button" className="remove-img-btn" onClick={removeAddImage} title="Remove image">✕</button>
+                                </div>
+                            )}
+                        </div>
+                        <button type="submit" className={`btn btn-block ${isAddComplete ? 'btn-save-complete' : 'btn-warning'}`} style={{height: '50px', borderRadius: '12px', fontWeight: 800, marginTop: '2rem'}}><i className="fas fa-save mr-2"></i> Save Product</button>
+                    </form>
+                </div>
+
+                {/* Product List */}
+                <div>
+                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1.5rem'}}>
+                        <h3 style={{fontWeight: 800, color: 'var(--text-main)'}}><i className="fas fa-list mr-2" style={{color: 'var(--primary)'}}></i>Inventory ({filteredItems.length})</h3>
+                        <a href="/snacks/stock" className="btn btn-sm" style={{background:'var(--status-success-bg)', color:'var(--status-success-text)', borderRadius: '8px', padding: '6px 12px', fontWeight: 700, border: '1px solid var(--border)'}}><i className="fas fa-truck-loading mr-2"></i>Receive Stock</a>
+                    </div>
+
+                    {/* Instant Search Bar */}
+                    <div style={{marginBottom: '2rem', position: 'relative'}}>
+                        <div style={{position: 'absolute', left: '1.25rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none'}}>
+                            <i className="fas fa-search"></i>
+                        </div>
+                        <input 
+                            type="text" 
+                            placeholder="Search products by name or barcode..." 
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            style={{
+                                paddingLeft: '3rem', 
+                                height: '3.5rem', 
+                                borderRadius: '1rem', 
+                                border: '1px solid var(--border)', 
+                                background: 'var(--input-bg)',
+                                color: 'var(--text-main)',
+                                fontSize: '1rem',
+                                fontWeight: 500,
+                                width: '100%',
+                                boxShadow: 'var(--shadow-sm)'
+                            }}
+                        />
+                        {searchTerm && (
+                            <button 
+                                onClick={() => setSearchTerm('')}
+                                style={{position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem'}}
+                            >
+                                &times;
+                            </button>
+                        )}
+                    </div>
+                    
+                    {loading ? (
+                        <div style={{textAlign: 'center', padding: '5rem'}}>
+                            <i className="fas fa-circle-notch fa-spin fa-3x" style={{color: 'var(--primary)', opacity: 0.3}}></i>
+                            <p style={{marginTop:'1.5rem', fontWeight: 700, color: 'var(--text-muted)'}}>Syncing data...</p>
+                        </div>
+                    ) : items.length === 0 ? (
+                        <div className="card text-center text-muted" style={{padding: '5rem', borderRadius: '1.5rem', background: 'var(--card-bg)', border: '1px solid var(--border)'}}>
+                            <i className="fas fa-box-open fa-4x" style={{opacity: 0.1, marginBottom: '1.5rem'}}></i>
+                            <h5 style={{fontWeight: 700, color: 'var(--text-main)'}}>No products registered</h5>
+                            <p style={{color: 'var(--text-muted)'}}>Start adding products using the form on the left</p>
+                        </div>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                            {/* Main Stock Section */}
+                            <div>
+                                <h4 style={{ fontWeight: 800, color: 'var(--primary)', marginBottom: '1rem', textTransform: 'uppercase', fontSize: '0.8rem', letterSpacing: '1px' }}>
+                                    <i className="fas fa-warehouse mr-2"></i> Main Stock (Bulk)
+                                </h4>
+                                {items.filter(i => i.is_bulk).map(item => (
+                                    <div key={item.id} className="product-card">
+                                        <div style={{display: 'flex', gap: '1.2rem', alignItems: 'center', flex: 1}}>
+                                            <div style={{width: '80px', height: '80px', borderRadius: '16px', overflow: 'hidden', flexShrink: 0, border: '1px solid var(--border)', background: 'var(--surface-solid)', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+                                                {item.image_url ? (
+                                                    <img src={item.image_url} alt={item.name} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+                                                ) : (
+                                                    <i className="fas fa-hamburger fa-2x" style={{color: 'var(--text-muted)', opacity: 0.5}}></i>
+                                                )}
+                                            </div>
+                                            <div style={{flex: 1}}>
+                                                <div style={{display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem'}}>
+                                                    <span style={{fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-main)'}}>{item.name}</span>
+                                                    <span className={`badge-stock ${item.stock === 0 ? 'badge-zero' : item.stock < 10 ? 'badge-low' : 'badge-ok'}`}>
+                                                        {item.stock} Available
+                                                    </span>
+                                                    <span className="badge-stock pill-unit" style={{fontSize: '0.65rem'}}>{item.unit_size}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="price-pill pill-purchase">Cost: ₹{item.purchase_price.toFixed(2)}</span>
+                                                    <span className="price-pill pill-retail">Retail: ₹{item.retail_price.toFixed(2)}</span>
+                                                    <span className="price-pill pill-wholesale">Wholesale: ₹{item.wholesale_price.toFixed(2)}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div style={{display: 'flex', gap: '8px', marginLeft: '1.25rem', flexShrink: 0}}>
+                                            <button onClick={() => { setRepackBulkItem(item); setShowRepackModal(true); }} className="btn btn-sm" style={{background:'var(--status-success-bg)', color:'var(--status-success-text)', border: '1px solid var(--border)'}} title="Repack">
+                                                <i className="fas fa-boxes"></i>
+                                            </button>
+                                            <a href={`/snacks/barcode/${item.id}`} className="btn btn-sm" style={{background:'var(--surface-solid)', color:'var(--primary)', border: '1px solid var(--border)'}} title="Barcode">
+                                                <i className="fas fa-barcode"></i>
+                                            </a>
+                                            <button onClick={() => openEdit(item)} className="btn btn-sm" style={{background:'var(--surface-solid)', color:'var(--warning)', border: '1px solid var(--border)'}} title="Edit">
+                                                <i className="fas fa-edit"></i>
+                                            </button>
+                                            <button onClick={() => handleDelete(item.id, item.name)} className="btn btn-sm" style={{background:'var(--status-danger-bg)', color:'var(--status-danger-text)', border: '1px solid var(--border)'}} title="Delete">
+                                                <i className="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Retail Section */}
+                            <div>
+                                <h4 style={{ fontWeight: 800, color: 'var(--accent)', marginBottom: '1rem', textTransform: 'uppercase', fontSize: '0.8rem', letterSpacing: '1px' }}>
+                                    <i className="fas fa-shopping-basket mr-2"></i> Retail / Repacked Items
+                                </h4>
+                                {items.filter(i => !i.is_bulk).map(item => (
+                                    <div key={item.id} className="product-card" style={{ background: 'rgba(59, 130, 246, 0.05)', borderStyle: 'dashed' }}>
+                                        <div style={{display: 'flex', gap: '1.2rem', alignItems: 'center', flex: 1}}>
+                                            <div style={{width: '80px', height: '80px', borderRadius: '16px', overflow: 'hidden', flexShrink: 0, border: '1px solid var(--border)', background: 'var(--surface-solid)', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+                                                {item.image_url ? (
+                                                    <img src={item.image_url} alt={item.name} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+                                                ) : (
+                                                    <i className="fas fa-hamburger fa-2x" style={{color: 'var(--text-muted)', opacity: 0.5}}></i>
+                                                )}
+                                            </div>
+                                            <div style={{flex: 1}}>
+                                                <div style={{display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem'}}>
+                                                    <span style={{fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-main)'}}>{item.name}</span>
+                                                    <span className={`badge-stock ${item.stock === 0 ? 'badge-zero' : item.stock < 10 ? 'badge-low' : 'badge-ok'}`}>
+                                                        {item.stock} Available
+                                                    </span>
+                                                    <span className="badge-stock pill-unit" style={{fontSize: '0.65rem', background: 'var(--accent)', color: '#fff'}}>{item.unit_size}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="price-pill pill-purchase">Cost: ₹{item.purchase_price.toFixed(2)}</span>
+                                                    <span className="price-pill pill-retail">Retail: ₹{item.retail_price.toFixed(2)}</span>
+                                                    <span className="price-pill pill-wholesale">Wholesale: ₹{item.wholesale_price.toFixed(2)}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div style={{display: 'flex', gap: '8px', marginLeft: '1.5rem'}}>
+                                            <a href={`/snacks/barcode/${item.id}`} className="btn btn-sm" style={{background:'var(--surface-solid)', color:'var(--primary)', border: '1px solid var(--border)'}} title="Barcode">
+                                                <i className="fas fa-barcode"></i>
+                                            </a>
+                                            <button onClick={() => openEdit(item)} className="btn btn-sm" style={{background:'var(--surface-solid)', color:'var(--warning)', border: '1px solid var(--border)'}} title="Edit">
+                                                <i className="fas fa-edit"></i>
+                                            </button>
+                                            <button onClick={() => handleDelete(item.id, item.name)} className="btn btn-sm" style={{background:'var(--status-danger-bg)', color:'var(--status-danger-text)', border: '1px solid var(--border)'}} title="Delete">
+                                                <i className="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Repack Modal */}
+            {showRepackModal && repackBulkItem && (
+                <div className="modal-overlay" onClick={() => setShowRepackModal(false)}>
+                    <div className="card modal-card" onClick={e => e.stopPropagation()}>
+                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '1.5rem'}}>
+                            <h3 style={{fontWeight: 800, color: 'var(--text-main)'}}><i className="fas fa-boxes mr-2" style={{color: 'var(--success)'}}></i>Repack Tool</h3>
+                            <button onClick={() => setShowRepackModal(false)} style={{background:'none', border:'none', fontSize: '1.5rem', cursor:'pointer', color: 'var(--text-main)'}}>&times;</button>
+                        </div>
+                        
+                        <div style={{background: 'rgba(16, 185, 129, 0.05)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.2)', marginBottom: '1.5rem'}}>
+                            <p style={{fontSize: '0.9rem', marginBottom: '0.25rem'}}><strong>Bulk Product:</strong> {repackBulkItem.name}</p>
+                            <p style={{fontSize: '0.9rem', marginBottom: '0.25rem'}}><strong>Bulk Cost:</strong> ₹{repackBulkItem.purchase_price.toFixed(2)}</p>
+                            <p style={{fontSize: '0.9rem'}}><strong>Available Stock:</strong> {repackBulkItem.stock} qty</p>
+                        </div>
+
+                        <form onSubmit={handleRepackSubmit}>
+                            <div className="form-group">
+                                <label>Packaged Product Name</label>
+                                <input type="text" value={repackFormData.new_item_name} onChange={e => setRepackFormData({...repackFormData, new_item_name: e.target.value})} className="form-control" placeholder="e.g. Chips 200g Pack" required />
+                            </div>
+                            <div className="grid-2">
+                                <div className="form-group">
+                                    <label>Number of Packets</label>
+                                    <input type="number" value={repackFormData.num_packets} onChange={e => setRepackFormData({...repackFormData, num_packets: e.target.value})} className="form-control" placeholder="e.g. 5" required />
+                                </div>
+                                <div className="form-group">
+                                    <label>Pack Weight/Size</label>
+                                    <input type="text" value={repackFormData.packet_size} onChange={e => setRepackFormData({...repackFormData, packet_size: e.target.value})} className="form-control" placeholder="e.g. 200g" required />
+                                </div>
+                            </div>
+                            <div className="grid-2">
+                                <div className="form-group">
+                                    <label>Manual Retail Price (₹)</label>
+                                    <input type="number" step="0.01" value={repackFormData.retail_price} onChange={e => setRepackFormData({...repackFormData, retail_price: e.target.value})} className="form-control" placeholder="Selling Price" required />
+                                </div>
+                                <div className="form-group" style={{opacity: 0.5}}>
+                                    <label>Cover Charges (Total ₹)</label>
+                                    <input type="number" className="form-control" value="0" disabled />
+                                    <small>Charges removed as requested</small>
+                                </div>
+                            </div>
+
+                            {/* Math Preview Section */}
+                            {repackFormData.num_packets > 0 && (
+                                <div style={{background: 'var(--surface-solid)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border)', marginTop: '1rem', marginBottom: '1.5rem'}}>
+                                    <h5 style={{fontSize: '0.8rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.5rem'}}>Math Breakdown</h5>
+                                    <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '4px'}}>
+                                        <span>Unit Purchase Cost:</span>
+                                        <span>₹{( (repackBulkItem.purchase_price) / repackFormData.num_packets ).toFixed(2)}</span>
+                                    </div>
+                                    <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '1rem', fontWeight: 800, marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed var(--border)', color: 'var(--success)'}}>
+                                        <span>Est. Profit / Pack:</span>
+                                        <span>₹{( repackFormData.retail_price - ((repackBulkItem.purchase_price) / repackFormData.num_packets) ).toFixed(2)}</span>
+                                    </div>
+                                </div>
+                            )}
+
+                            <button type="submit" className="btn btn-block btn-primary" style={{height: '50px', background: 'linear-gradient(135deg, var(--success), #059669)'}}>
+                                <i className="fas fa-check-circle mr-2"></i> Confirm Repack
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            )}
+            
+            {/* Edit Modal */}
+            {showEditModal && editItem && (
+                <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
+                    <div className="card modal-card" onClick={e => e.stopPropagation()}>
+                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '1.5rem'}}>
+                            <h3 style={{fontWeight: 800, color: 'var(--text-main)'}}><i className="fas fa-edit mr-2" style={{color: 'var(--warning)'}}></i>Edit Product</h3>
+                            <button onClick={() => setShowEditModal(false)} style={{background:'none', border:'none', fontSize: '1.5rem', cursor:'pointer', color: 'var(--text-main)'}}>&times;</button>
+                        </div>
+                        <form onSubmit={handleEdit}>
+                            <div className="form-group">
+                                <label style={{fontWeight: 700, color: 'var(--text-muted)'}}>Product Name</label>
+                                <input type="text" value={editItem.name} onChange={e => setEditItem({...editItem, name: e.target.value})} className="form-control" style={{background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'}} required />
+                            </div>
+                            <div className="form-group" style={{marginTop: '1rem'}}>
+                                <label style={{fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between'}}>
+                                    <span>Universal Barcode (Optional)</span>
+                                    <div style={{display:'flex', gap:'0.75rem', alignItems:'center'}}>
+                                        <span style={{cursor: 'pointer', color: 'var(--warning)'}} onClick={() => document.getElementById('edit-barcode').focus()}>
+                                            <i className="fas fa-keyboard"></i> Scanner Input
+                                        </span>
+                                        <span style={{cursor: 'pointer', color: 'var(--primary)', fontWeight: 800}} onClick={() => openBarcodeScanner('edit')}>
+                                            <i className="fas fa-camera"></i> Internal Camera
+                                        </span>
+                                    </div>
+                                </label>
+                                <input type="text" id="edit-barcode" value={editItem.barcode || ''} onChange={e => setEditItem({...editItem, barcode: e.target.value})} placeholder="Scan or type barcode" className="form-control" style={{background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'}} />
+                            </div>
+                            <div className="grid-2" style={{gap: '1rem', marginTop: '1rem'}}>
+                                <div className="form-group">
+                                    <label style={{fontWeight: 700, color: 'var(--text-muted)'}}>Retail Price (₹)</label>
+                                    <input type="number" step="0.01" value={editItem.retail_price} onChange={e => setEditItem({...editItem, retail_price: e.target.value})} className="form-control" style={{background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'}} required />
+                                </div>
+                                <div className="form-group">
+                                    <label style={{fontWeight: 700, color: 'var(--text-muted)'}}>Purchase Price (₹)</label>
+                                    <input type="number" step="0.01" value={editItem.purchase_price} onChange={e => setEditItem({...editItem, purchase_price: e.target.value})} className="form-control" style={{background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'}} required />
+                                </div>
+                            </div>
+                            <div className="grid-2" style={{gap: '1rem', marginTop: '1rem'}}>
+                                <div className="form-group">
+                                    <label style={{fontWeight: 700, color: 'var(--text-muted)'}}>Wholesale Price (₹)</label>
+                                    <input type="number" step="0.01" value={editItem.wholesale_price} onChange={e => setEditItem({...editItem, wholesale_price: e.target.value})} className="form-control" style={{background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'}} required />
+                                </div>
+                                <div className="form-group">
+                                    <label style={{fontWeight: 700, color: 'var(--text-muted)'}}>Current Stock</label>
+                                    <input type="number" value={editItem.stock} onChange={e => setEditItem({...editItem, stock: e.target.value})} className="form-control" style={{background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'}} required />
+                                </div>
+                            </div>
+                            <div className="grid-2" style={{gap: '1rem', marginTop: '1rem'}}>
+                                <div className="form-group">
+                                    <label style={{fontWeight: 700, color: 'var(--text-muted)'}}>Unit Size</label>
+                                    <input type="text" value={editItem.unit_size} onChange={e => setEditItem({...editItem, unit_size: e.target.value})} className="form-control" style={{background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)'}} required />
+                                </div>
+                                <div className="form-group" style={{display: 'flex', alignItems: 'center', gap: '10px', height: '100%', paddingTop: '25px'}}>
+                                    <input type="checkbox" checked={editItem.is_bulk} onChange={e => setEditItem({...editItem, is_bulk: e.target.checked})} id="edit-is-bulk" />
+                                    <label htmlFor="edit-is-bulk" style={{fontWeight: 700, color: 'var(--text-muted)', cursor: 'pointer', margin: 0}}>Is Main Stock (Bulk)</label>
+                                </div>
+                            </div>
+                            <div className="form-group" style={{marginTop: '1rem'}}>
+                                <label style={{fontWeight: 700, color: 'var(--text-muted)'}}>Update Image (Optional, max 2MB)</label>
+                                <input type="file" id="edit-image-input" accept="image/*" onChange={e => handleImageChange(e, 'edit')} className="form-control" style={{background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', padding: '10px'}} />
+                                {(editItem.image_url || editItem.image) && !editRemoveImage && (
+                                    <button type="button" onClick={removeEditImage} className="btn btn-sm" style={{marginTop: '10px', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', border: '1px solid var(--danger)', padding: '6px 12px', fontSize: '0.8rem', borderRadius: '6px'}}>
+                                        <i className="fas fa-trash-alt mr-1"></i> Remove image
+                                    </button>
+                                )}
+                                {editRemoveImage && (
+                                    <p style={{color: 'var(--status-danger-text)', fontSize: '0.8rem', marginTop: '6px'}}><i className="fas fa-info-circle mr-1"></i>Image will be removed on save.</p>
+                                )}
+                            </div>
+                            <button type="submit" className={`btn btn-block ${isEditComplete ? 'btn-save-complete' : 'btn-warning'}`} style={{height: '50px', borderRadius: '12px', fontWeight: 800, marginTop: '2rem'}}><i className="fas fa-save mr-2"></i> Update Product</button>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {scannerTarget && (
+                <BarcodeScannerModal
+                    targetLabel={scannerTarget === 'add' ? 'new product barcode' : 'existing product barcode'}
+                    onScan={applyScannedBarcode}
+                    onClose={closeBarcodeScanner}
+                />
+            )}
+            
+            <div className="text-center mt-5">
+                <a href="/admin" className="btn btn-secondary" style={{
+                    borderRadius: '0.75rem', 
+                    padding: '0.75rem 1.5rem', 
+                    background: 'var(--surface-solid)', 
+                    color: 'var(--text-main)', 
+                    border: '1px solid var(--border)',
+                    fontWeight: 700,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                }}>
+                    <i className="fas fa-arrow-left"></i> Return to Admin Dashboard
+                </a>
+            </div>
+        </div>
+    );
+};
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<ProductList />);

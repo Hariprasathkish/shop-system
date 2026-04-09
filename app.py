@@ -283,7 +283,7 @@ def init_db():
         "ALTER TABLE dairy_customers ADD COLUMN IF NOT EXISTS last_bill_date DATE",
         "ALTER TABLE dairy_customers ADD COLUMN IF NOT EXISTS email TEXT",
         "ALTER TABLE dairy_customers ADD COLUMN IF NOT EXISTS custom_id TEXT",
-        "ALTER TABLE dairy_customers ALTER COLUMN last_bill_date TYPE DATE USING (NULLIF(last_bill_date, '')::DATE)"
+        "ALTER TABLE dairy_customers ALTER COLUMN last_bill_date TYPE DATE USING (NULLIF(last_bill_date::text, '')::DATE)"
     ]:
         try:
             cur.execute(cmd)
@@ -364,7 +364,7 @@ def init_db():
         "ALTER TABLE attendance_requests ADD COLUMN IF NOT EXISTS log_id INTEGER",
         "ALTER TABLE attendance_requests ADD COLUMN IF NOT EXISTS new_date DATE",
         "ALTER TABLE attendance_requests ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
-        "ALTER TABLE attendance_requests ALTER COLUMN new_date TYPE DATE USING (NULLIF(new_date, '')::DATE)",
+        "ALTER TABLE attendance_requests ALTER COLUMN new_date TYPE DATE USING (NULLIF(new_date::text, '')::DATE)",
         "ALTER TABLE attendance_requests ALTER COLUMN created_at TYPE TIMESTAMP USING (created_at::TIMESTAMP)"
     ]:
         try:
@@ -1604,8 +1604,15 @@ def generate_snacks_summary():
     elements.append(Spacer(1, 0.5*inch))
     elements.append(Paragraph("Report generated on " + today.strftime("%d-%m-%Y %H:%M"), styles['Italic']))
     
-    doc.build(elements)
-    return send_file(filepath, as_attachment=True)
+    try:
+        doc.build(elements)
+        return send_file(filepath, as_attachment=True)
+    except Exception as e:
+        print(f"ERROR: Snacks Summary PDF building failed: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        flash(f"PDF Error: {str(e)}", "danger")
+        return redirect("/snacks/accounts")
 
 # ------------------ DAIRY MODULE ------------------
 
@@ -2184,10 +2191,12 @@ def staff_payroll_pdf(staff_id):
     if session.get("role") != "admin":
         return redirect("/")
     
+    from psycopg2.extras import RealDictCursor
+    
     month_str = request.args.get("month", datetime.date.today().strftime("%Y-%m"))
     
     conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=DictCursor)
+    cur = conn.cursor(cursor_factory=RealDictCursor)
     # 1. Fetch staff details
     cur.execute("SELECT name, username FROM delivery_staff WHERE id=%s", (staff_id,))
     staff = cur.fetchone()
@@ -2198,8 +2207,8 @@ def staff_payroll_pdf(staff_id):
     staff_username = staff['username']
     
     # 2. Fetch assigned customers count
-    cur.execute("SELECT COUNT(*) FROM dairy_customers WHERE delivery_staff_id=%s", (staff_id,))
-    customer_count = cur.fetchone()[0]
+    cur.execute("SELECT COUNT(*) as count FROM dairy_customers WHERE delivery_staff_id=%s", (staff_id,))
+    customer_count = cur.fetchone()['count']
 
     # 3. Fetch payroll entry for this month
     cur.execute("SELECT * FROM staff_payroll WHERE staff_id=%s AND month=%s", (staff_id, month_str))
@@ -2317,9 +2326,15 @@ def staff_payroll_pdf(staff_id):
     elements.append(Spacer(1, 0.5*inch))
     elements.append(Paragraph("This is a computer-generated document.", ParagraphStyle('Footer', fontSize=8, alignment=1, textColor=colors.grey)))
 
-    doc.build(elements)
-    
-    return send_file(filepath, as_attachment=True)
+    try:
+        doc.build(elements)
+        return send_file(filepath, as_attachment=True)
+    except Exception as e:
+        print(f"ERROR: PDF building failed for staff {staff_id}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        flash(f"PDF Error: {str(e)}", "danger")
+        return redirect("/dairy/staff")
 
 # ------------------ MASTER PRODUCTS MANAGEMENT ------------------
 @app.route("/dairy/products", methods=["GET", "POST"])
