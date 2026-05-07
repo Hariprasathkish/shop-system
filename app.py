@@ -15,7 +15,7 @@ from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
-from db_config import DB_CONFIG
+from db_config import DATABASE_URL, LOCAL_DB_CONFIG
 import psycopg2
 import cloudinary
 import cloudinary.uploader
@@ -32,7 +32,9 @@ if CLOUDINARY_URL:
 else:
     print("CRITICAL: CLOUDINARY_URL NOT FOUND in environment variables!")
 def get_db_connection():
-    return psycopg2.connect(**DB_CONFIG)
+    if DATABASE_URL:
+        return psycopg2.connect(DATABASE_URL)
+    return psycopg2.connect(**LOCAL_DB_CONFIG)
 
 UPLOAD_FOLDER_SNACKS = os.path.join('static', 'uploads', 'snacks')
 os.makedirs(UPLOAD_FOLDER_SNACKS, exist_ok=True)
