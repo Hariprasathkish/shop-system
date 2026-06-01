@@ -27,8 +27,8 @@ load_dotenv()
 # Cloudinary configuration
 CLOUDINARY_URL = os.getenv("CLOUDINARY_URL")
 if CLOUDINARY_URL:
-    print(f"DEBUG: Cloudinary URL detected: {CLOUDINARY_URL[:20]}...") 
-    cloudinary.config(secure=True)
+    print(f"DEBUG: Cloudinary URL detected: {CLOUDINARY_URL[:20]}...")
+    cloudinary.config(cloudinary_url=CLOUDINARY_URL)
 else:
     print("CRITICAL: CLOUDINARY_URL NOT FOUND in environment variables!")
 def get_db_connection():
