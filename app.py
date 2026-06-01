@@ -1363,13 +1363,16 @@ def snacks_accounts():
 
     # Today's sales (Always today)
     today = datetime.date.today().isoformat()
-    cur.execute("SELECT COUNT(*), SUM(grand_total) FROM snacks_bills WHERE date::TEXT LIKE %s", (f"{today}%",))
+    today_start = f"{today} 00:00:00"
+    today_end = f"{today} 23:59:59"
+    
+    cur.execute("SELECT COUNT(*), SUM(grand_total) FROM snacks_bills WHERE date >= %s AND date <= %s", (today_start, today_end))
     today_row = cur.fetchone()
     today_bills = today_row[0] or 0
     today_revenue = today_row[1] or 0
     
     # Today's Cash vs Online
-    cur.execute("SELECT payment_mode, SUM(grand_total) FROM snacks_bills WHERE date::TEXT LIKE %s GROUP BY payment_mode", (f"{today}%",))
+    cur.execute("SELECT payment_mode, SUM(grand_total) FROM snacks_bills WHERE date >= %s AND date <= %s GROUP BY payment_mode", (today_start, today_end))
     today_payment_rows = cur.fetchall()
     today_cash = 0.0
     today_online = 0.0
@@ -1748,230 +1751,156 @@ def dairy_accounts_overview():
         return redirect("/")
     
     month_str = request.args.get("month", datetime.date.today().strftime("%Y-%m"))
+    year, month = map(int, month_str.split("-"))
+    num_days_in_month = calendar.monthrange(year, month)[1]
+    start_date = f"{year}-{month:02d}-01"
+    end_date = f"{year}-{month:02d}-{num_days_in_month}"
     
     conn = get_db_connection()
     cur = conn.cursor()
     
-    # Fetch all staff
+    # 1. Fetch all staff
     cur.execute("SELECT id, name FROM delivery_staff")
     staff_list = cur.fetchall()
-    
-    # Add an entry for unassigned
-    staff_data = [] # List of {staff_info, customers: [], totals: {bill, paid_cash, paid_online, balance}}
-    
-    # Process each staff (including None for unassigned)
-    all_staff_ids = [s[0] for s in staff_list] + [None]
     staff_names = {s[0]: s[1] for s in staff_list}
     staff_names[None] = "Unassigned"
     
-    grand_totals = {"bill": 0.0, "cash": 0.0, "online": 0.0, "balance": 0.0}
-
-    for sid in all_staff_ids:
-        if sid is None:
-            cur.execute("SELECT id, name, service_charge, last_bill_generated_on, net_payable, billing_type, last_bill_amount FROM dairy_customers WHERE delivery_staff_id IS NULL ORDER BY delivery_order ASC, id ASC")
-        else:
-            cur.execute("SELECT id, name, service_charge, last_bill_generated_on, net_payable, billing_type, last_bill_amount FROM dairy_customers WHERE delivery_staff_id = %s ORDER BY delivery_order ASC, id ASC", (sid,))
+    # 2. Fetch all customers with their staff info
+    cur.execute("""
+        SELECT id, name, service_charge, last_bill_generated_on, net_payable, billing_type, last_bill_amount, delivery_staff_id 
+        FROM dairy_customers 
+        ORDER BY delivery_staff_id, delivery_order ASC, id ASC
+    """)
+    all_customers = cur.fetchall()
+    
+    # 3. Batch fetch all payments for the month
+    cur.execute("SELECT customer_id, amount, payment_mode FROM dairy_payments WHERE month = %s", (month_str,))
+    payments_map = {}
+    for cid, amt, mode in cur.fetchall():
+        if cid not in payments_map: payments_map[cid] = []
+        payments_map[cid].append((amt, mode))
         
-        customers = cur.fetchall()
-        if not customers and sid is not None:
-            continue
-        if not customers and sid is None:
-            continue
+    # 4. Batch fetch all customer products
+    cur.execute("SELECT customer_id, product_name, default_qty, price FROM customer_products")
+    products_map = {}
+    for cid, pname, dqty, price in cur.fetchall():
+        if cid not in products_map: products_map[cid] = []
+        products_map[cid].append((pname, dqty, price))
+        
+    # 5. Batch fetch all extra purchases for the month
+    cur.execute("""
+        SELECT customer_id, product_name, quantity, rate, amount, date 
+        FROM dairy_extra_purchases 
+        WHERE date >= %s AND date <= %s
+    """, (start_date, end_date))
+    extras_map = {}
+    for cid, pname, qty, rate, amt, edate in cur.fetchall():
+        if cid not in extras_map: extras_map[cid] = []
+        extras_map[cid].append((pname, qty, rate, amt, edate))
 
-        staff_entry = {
-            "id": sid,
-            "name": staff_names[sid],
-            "customers": [],
+    # Initialize staff_data structure
+    staff_data_map = {}
+    for sid in [s[0] for s in staff_list] + [None]:
+        staff_data_map[sid] = {
+            "id": sid, "name": staff_names[sid], "customers": [],
             "totals": {
-                "bill": 0.0, "arrears": 0.0, "cash": 0.0, "online": 0.0, "balance": 0.0,
-                "qty": 0.0,
+                "bill": 0.0, "arrears": 0.0, "cash": 0.0, "online": 0.0, "balance": 0.0, "qty": 0.0,
                 "reservation_count": 0, "reservation_qty": 0.0,
                 "current_month_count": 0, "current_month_qty": 0.0,
                 "month_end_count": 0, "month_end_qty": 0.0,
                 "products": {}
             }
         }
+
+    grand_totals = {"bill": 0.0, "cash": 0.0, "online": 0.0, "balance": 0.0}
+
+    for cid, cname, service_charge, last_gen, net_payable, billing_type, last_bill_amount, sid in all_customers:
+        staff_entry = staff_data_map.get(sid)
+        if not staff_entry: continue
         
-        for cid, cname, service_charge, last_gen, net_payable, billing_type, last_bill_amount in customers:
-            # Billing cycle label & description
-            btype = billing_type or 'current_month'
+        btype = billing_type or 'current_month'
+        if btype == 'reservation':
+            cycle_label, cycle_start = 'R', datetime.date(year, month, 16)
+            next_m, next_y = (month + 1 if month < 12 else 1), (year if month < 12 else year + 1)
+            cycle_end = datetime.date(next_y, next_m, 15)
+        elif btype == 'month_end':
+            cycle_label, bill_month_start = 'M', datetime.date(year, month, 1)
+            prev_last = bill_month_start - datetime.timedelta(days=1)
+            cycle_start, cycle_end = prev_last.replace(day=1), prev_last
+        else:
+            cycle_label, cycle_start, cycle_end = 'CM', datetime.date(year, month, 1), datetime.date(year, month, num_days_in_month)
+
+        billing_cycle_desc = f"{cycle_start.strftime('%d-%b-%Y')} → {cycle_end.strftime('%d-%b-%Y')}"
+        current_bill, last_gen_in_month = 0.0, None
+        if last_gen:
             try:
-                year, month = map(int, month_str.split("-"))
-            except:
-                year, month = datetime.date.today().year, datetime.date.today().month
-
-            if btype == 'reservation':
-                cycle_label = 'R'
-                cycle_start = datetime.date(year, month, 16)
-                next_m = month + 1 if month < 12 else 1
-                next_y = year if month < 12 else year + 1
-                cycle_end = datetime.date(next_y, next_m, 15)
-            elif btype == 'month_end':
-                cycle_label = 'M'
-                bill_month_start = datetime.date(year, month, 1)
-                prev_last = bill_month_start - datetime.timedelta(days=1)
-                cycle_start = prev_last.replace(day=1)
-                cycle_end = prev_last
-            else:
-                cycle_label = 'CM'
-                cycle_start = datetime.date(year, month, 1)
-                cycle_end = datetime.date(year, month, calendar.monthrange(year, month)[1])
-
-            billing_cycle_desc = f"{cycle_start.strftime('%d-%b-%Y')} → {cycle_end.strftime('%d-%b-%Y')}"
-
-            # last_gen relevant only if it belongs to the selected month
-            last_gen_in_month = None
-            if last_gen:
-                try:
-                    lg_date = datetime.date.fromisoformat(last_gen)
-                    # For reservation, the cycle spans two calendar months; check within cycle
-                    if cycle_start <= lg_date <= cycle_end:
-                        last_gen_in_month = last_gen
-                    elif lg_date.strftime('%Y-%m') == month_str:
-                        last_gen_in_month = last_gen
-                except:
-                    pass
-            if last_gen_in_month:
-                current_bill = float(last_bill_amount or 0.0)
-            else:
-                current_bill = 0.0
-            
-            # Arrears represent any unpaid balance from previous months
-            # net_payable is the running balance in the DB (Total Debt)
-            # If current_bill is part of net_payable, arrears = net_payable - current_bill
-            arrears = float(net_payable or 0.0) - current_bill
-            if arrears < 0: arrears = 0.0
-
-            # Fetch all payment records for the selected month and sum them
-            cur.execute("SELECT amount, payment_mode FROM dairy_payments WHERE customer_id = %s AND month = %s", (cid, month_str))
-            all_payments = cur.fetchall()
-            
-            paid_amount = 0.0
-            cash_paid = 0.0
-            online_paid = 0.0
-            modes = set()
-            
-            for p_amt_raw, p_mode in all_payments:
-                p_amt = float(p_amt_raw or 0)
-                paid_amount += p_amt
-                if p_mode:
-                    modes.add(p_mode)
-                if p_mode == "Cash":
-                    cash_paid += p_amt
-                elif p_mode == "Online":
-                    online_paid += p_amt
-            
-            if not all_payments:
-                mode = "N/A"
-            elif len(modes) > 1:
-                mode = "Mixed"
-            elif len(modes) == 1:
-                mode = list(modes)[0]
-            else:
-                mode = "N/A"
-            
-            # The shown balance is the TOTAL debt (arrears + current_bill) minus what was paid this month.
-            total_debt = arrears + current_bill
-            balance = total_debt - paid_amount
-            
-            # Fetch breakdown for accounts display
-            # 1. Base products
-            cur.execute("SELECT product_name, default_qty, price FROM customer_products WHERE customer_id=%s", (cid,))
-            p_details = cur.fetchall()
-            cust_products_list = []
-            fixed_qty_sum = 0
-            base_total = 0
-            
-            # Number of days in the billing cycle for this customer
-            # (Simplification: assuming roughly 30 days or using current month)
-            num_days_in_month = calendar.monthrange(int(month_str[:4]), int(month_str[5:7]))[1]
-            
-            for pname, dqty, price in p_details:
-                qty_val = float(dqty or 0)
-                price_val = float(price or 0)
-                amt = qty_val * price_val * num_days_in_month
-                cust_products_list.append({"name": pname, "qty": f"{qty_val} x {num_days_in_month}d", "rate": price_val, "bill": amt})
-                fixed_qty_sum += qty_val
-                base_total += amt
-                
-                # Product-wise totals per staff
-                if pname not in staff_entry["totals"]["products"]:
-                    staff_entry["totals"]["products"][pname] = 0.0
-                staff_entry["totals"]["products"][pname] += qty_val
-
-            # 2. Extras (Actual deviations)
-            # This is hard to calculate exactly without full bill logic, 
-            # so we'll show a summary or just the total net_payable from the DB.
-            # But the user wants to see "Extras" in the breakdown.
-            extras_list = []
-            cur.execute("SELECT product_name, quantity, rate, amount, date FROM dairy_extra_purchases WHERE customer_id=%s AND to_char(date, 'YYYY-MM') = %s", (cid, month_str))
-            for epname, eqty, erate, eamt, edate in cur.fetchall():
-                # Fix for subscriptable date error (PG returns date objects)
-                day_str = edate.strftime("%d") if hasattr(edate, "strftime") else str(edate)[8:]
-                extras_list.append({"name": f"EXT: {epname} ({day_str})", "qty": eqty, "rate": erate, "bill": eamt})
-
-            # Potential filename if generated
-            p_filename = None
-            if last_gen:
-                s_name = cname.replace(" ", "_").replace("/", "-").replace("\\", "-")
-                p_filename = f"{s_name}_{month_str}_bill.pdf"
-
-            cust_row = {
-                "id": cid,
-                "name": cname,
-                "products": cust_products_list, 
-                "extras": extras_list,
-                "fixed_qty_sum": fixed_qty_sum,
-                "daily_qty": fixed_qty_sum,
-                "service_charge": service_charge,
-                "service_bill": float(service_charge or 0) * fixed_qty_sum,
-                "current_bill": current_bill,
-                "arrears": arrears,
-                "bill": current_bill + arrears,
-                "paid": paid_amount,
-                "mode": mode,
-                "balance": balance,
-                "last_gen": last_gen,
-                "last_gen_in_month": last_gen_in_month,
-                "billing_type": btype,
-                "cycle_label": cycle_label,
-                "billing_cycle_desc": billing_cycle_desc,
-                "pdf_filename": p_filename
-            }
-            
-            staff_entry["customers"].append(cust_row)
-            # Update staff totals
-            staff_entry["totals"]["bill"] = float(staff_entry["totals"]["bill"]) + float(current_bill or 0)
-            staff_entry["totals"]["arrears"] = float(staff_entry["totals"]["arrears"]) + float(arrears or 0)
-            staff_entry["totals"]["cash"] = float(staff_entry["totals"]["cash"]) + float(cash_paid or 0)
-            staff_entry["totals"]["online"] = float(staff_entry["totals"]["online"]) + float(online_paid or 0)
-            staff_entry["totals"]["balance"] = float(staff_entry["totals"]["balance"]) + float(balance or 0)
-            # Update cycle-based totals
-            staff_entry["totals"]["qty"] = float(staff_entry["totals"]["qty"]) + float(fixed_qty_sum)
-            if cycle_label == 'R':
-                staff_entry["totals"]["reservation_count"] += 1
-                staff_entry["totals"]["reservation_qty"] = float(staff_entry["totals"]["reservation_qty"]) + float(fixed_qty_sum)
-            elif cycle_label == 'CM':
-                staff_entry["totals"]["current_month_count"] += 1
-                staff_entry["totals"]["current_month_qty"] = float(staff_entry["totals"]["current_month_qty"]) + float(fixed_qty_sum)
-            elif cycle_label == 'M':
-                staff_entry["totals"]["month_end_count"] += 1
-                staff_entry["totals"]["month_end_qty"] = float(staff_entry["totals"]["month_end_qty"]) + float(fixed_qty_sum)
-            
-            # Update grand totals
-            grand_totals["bill"] = float(grand_totals["bill"]) + float(current_bill or 0)
-            grand_totals["cash"] = float(grand_totals["cash"]) + float(cash_paid or 0)
-            grand_totals["online"] = float(grand_totals["online"]) + float(online_paid or 0)
-            grand_totals["balance"] = float(grand_totals["balance"]) + float(balance or 0)
-            
-        staff_data.append(staff_entry)
+                lg_date = datetime.date.fromisoformat(last_gen)
+                if cycle_start <= lg_date <= cycle_end or lg_date.strftime('%Y-%m') == month_str:
+                    last_gen_in_month = last_gen
+            except: pass
+        if last_gen_in_month: current_bill = float(last_bill_amount or 0.0)
         
+        arrears = max(0.0, float(net_payable or 0.0) - current_bill)
+        paid_amount, cash_paid, online_paid, modes = 0.0, 0.0, 0.0, set()
+        for p_amt_raw, p_mode in payments_map.get(cid, []):
+            p_amt = float(p_amt_raw or 0)
+            paid_amount += p_amt
+            if p_mode: modes.add(p_mode)
+            if p_mode == "Cash": cash_paid += p_amt
+            elif p_mode == "Online": online_paid += p_amt
+        
+        mode = list(modes)[0] if len(modes) == 1 else ("Mixed" if len(modes) > 1 else "N/A")
+        balance = (arrears + current_bill) - paid_amount
+
+        cust_products_list, fixed_qty_sum = [], 0
+        for pname, dqty, price in products_map.get(cid, []):
+            qv, rv = float(dqty or 0), float(price or 0)
+            amt = qv * rv * num_days_in_month
+            cust_products_list.append({"name": pname, "qty": f"{qv} x {num_days_in_month}d", "rate": rv, "bill": amt})
+            fixed_qty_sum += qv
+            staff_entry["totals"]["products"][pname] = staff_entry["totals"]["products"].get(pname, 0.0) + qv
+
+        extras_list = []
+        for epname, eqty, erate, eamt, edate in extras_map.get(cid, []):
+            day_str = edate.strftime("%d") if hasattr(edate, "strftime") else str(edate)[8:10]
+            extras_list.append({"name": f"EXT: {epname} ({day_str})", "qty": eqty, "rate": erate, "bill": eamt})
+
+        p_filename = f"{cname.replace(' ', '_').replace('/', '-').replace('\\', '-')}_{month_str}_bill.pdf" if last_gen else None
+
+        cust_row = {
+            "id": cid, "name": cname, "products": cust_products_list, "extras": extras_list,
+            "fixed_qty_sum": fixed_qty_sum, "daily_qty": fixed_qty_sum, "service_charge": service_charge,
+            "service_bill": float(service_charge or 0) * fixed_qty_sum, "current_bill": current_bill,
+            "arrears": arrears, "bill": current_bill + arrears, "paid": paid_amount, "mode": mode,
+            "balance": balance, "last_gen": last_gen, "last_gen_in_month": last_gen_in_month,
+            "billing_type": btype, "cycle_label": cycle_label, "billing_cycle_desc": billing_cycle_desc,
+            "pdf_filename": p_filename
+        }
+        staff_entry["customers"].append(cust_row)
+        staff_entry["totals"]["bill"] += current_bill
+        staff_entry["totals"]["arrears"] += arrears
+        staff_entry["totals"]["cash"] += cash_paid
+        staff_entry["totals"]["online"] += online_paid
+        staff_entry["totals"]["balance"] += balance
+        staff_entry["totals"]["qty"] += fixed_qty_sum
+        if cycle_label == 'R':
+            staff_entry["totals"]["reservation_count"] += 1
+            staff_entry["totals"]["reservation_qty"] += fixed_qty_sum
+        elif cycle_label == 'CM':
+            staff_entry["totals"]["current_month_count"] += 1
+            staff_entry["totals"]["current_month_qty"] += fixed_qty_sum
+        elif cycle_label == 'M':
+            staff_entry["totals"]["month_end_count"] += 1
+            staff_entry["totals"]["month_end_qty"] += fixed_qty_sum
+        
+        grand_totals["bill"] += current_bill
+        grand_totals["cash"] += cash_paid
+        grand_totals["online"] += online_paid
+        grand_totals["balance"] += balance
+
+    staff_data = [v for k, v in staff_data_map.items() if v["customers"]]
     conn.close()
-    
-    return render_template("dairy/dairy_accounts.html", 
-                         staff_data=staff_data, 
-                         month_str=month_str,
-                         grand_totals=grand_totals)
+    return render_template("dairy/dairy_accounts.html", staff_data=staff_data, month_str=month_str, grand_totals=grand_totals)
 
 # ------------------ DELIVERY MODULE ------------------
 
@@ -2904,56 +2833,59 @@ def dairy_attendance_sheet():
     conn = get_db_connection()
     cur = conn.cursor()
     
-    # Get all customers ordered by delivery_order
+    # Get all customers with staff names
     cur.execute("""
-        SELECT id, name, phone, address, product_name, default_qty, price_per_liter, service_charge, 
-               delivery_staff_id, password, delivery_order, billing_type, 
-               last_bill_date, last_bill_generated_on, net_payable, email 
-        FROM dairy_customers 
-        ORDER BY delivery_order ASC, id DESC
+        SELECT c.id, c.name, c.phone, c.address, c.product_name, c.default_qty, c.price_per_liter, c.service_charge, 
+               c.delivery_staff_id, c.password, c.delivery_order, c.billing_type, 
+               c.last_bill_date, c.last_bill_generated_on, c.net_payable, c.email,
+               s.name as staff_name
+        FROM dairy_customers c
+        LEFT JOIN delivery_staff s ON c.delivery_staff_id = s.id
+        ORDER BY c.delivery_order ASC, c.id DESC
     """)
     customers_raw = cur.fetchall()
     
-    # Enrich with staff name and products
+    # Fetch all customer products in one query
+    cur.execute("SELECT id, product_name, default_qty, price, customer_id FROM customer_products ORDER BY delivery_order")
+    all_cust_products = cur.fetchall()
+    cust_products_map = {}
+    for p in all_cust_products:
+        cid = p[4]
+        if cid not in cust_products_map:
+            cust_products_map[cid] = []
+        cust_products_map[cid].append(p[:4])
+
     customers = []
     cid_to_first_pid = {}
     for c in customers_raw:
-        # Get staff name
-        staff_name = "Unassigned"
-        if c[8]: # delivery_staff_id
-            cur.execute("SELECT name FROM delivery_staff WHERE id=%s", (c[8],))
-            s = cur.fetchone()
-            if s: staff_name = s[0]
-            
-        cur.execute("SELECT id, product_name, default_qty, price FROM customer_products WHERE customer_id=%s ORDER BY delivery_order", (c[0],))
-        products = cur.fetchall()
-        c_list = list(c)
+        cid = c[0]
+        staff_name = c[16] or "Unassigned"
+        products = cust_products_map.get(cid, [])
+        
+        c_list = list(c[:16]) # Original 16 columns
         c_list.append(staff_name) # Index 16
         c_list.append(products)   # Index 17
         customers.append(c_list)
         if products:
-            cid_to_first_pid[c[0]] = products[0][0]
+            cid_to_first_pid[cid] = products[0][0]
 
     # Calculate days in month
     num_days = calendar.monthrange(year, month)[1]
     days = [datetime.date(year, month, day) for day in range(1, num_days + 1)]
+    start_date = f"{year}-{month:02d}-01"
+    end_date = f"{year}-{month:02d}-{num_days}"
     
-    # Fetch all logs for this month including product_id
+    # Fetch all logs for this month including product_id (using date range for index optimization)
     cur.execute("""
         SELECT customer_id, date, time_slot, quantity, product_id 
         FROM dairy_logs 
-        WHERE to_char(date, 'YYYY-MM') = %s
-    """, (month_str,))
+        WHERE date >= %s AND date <= %s
+    """, (start_date, end_date))
     logs = cur.fetchall()
     
-    # Build a map: {product_id: {date: qty}}
-    # Note: We assume one entry per product per day (AM slot usually). 
-    # If multiple slots, we might need to sum them or handle AM/PM. For now, summing or taking last.
     logs_map = {}
     for log in logs:
         cid, date, slot, qty, pid = log
-        
-        # Fallback for legacy logs without product_id
         if not pid:
             pid = cid_to_first_pid.get(cid)
             
@@ -2961,86 +2893,59 @@ def dairy_attendance_sheet():
             pid_str = str(pid)
             if pid_str not in logs_map:
                 logs_map[pid_str] = {}
-            # Stringify date key for JSON compatibility
             date_str = date.isoformat() if hasattr(date, "isoformat") else str(date)
-            # If entry exists (e.g. AM and PM), sum them
-            # logs_map[pid_str][date_str] = logs_map[pid_str].get(date_str, 0) + qty # If we want sum
-            logs_map[pid_str][date_str] = qty # For now, just take value (likely single slot)
+            logs_map[pid_str][date_str] = qty
     
-    # Fetch extra notes for this month
+    # Fetch extra notes
     cur.execute("SELECT customer_id, notes FROM dairy_extra_notes WHERE month=%s", (month_str,))
-    extra_notes_data = cur.fetchall()
-    extra_notes = {row[0]: row[1] for row in extra_notes_data}
+    extra_notes = {row[0]: row[1] for row in cur.fetchall()}
 
-    # Fetch structured extra purchases for this month
-    cur.execute("SELECT id, customer_id, date, product_name, quantity, rate, amount FROM dairy_extra_purchases WHERE to_char(date, 'YYYY-MM') = %s", (month_str,))
-    extra_purchases_db = cur.fetchall()
+    # Fetch extra purchases (using date range)
+    cur.execute("""
+        SELECT id, customer_id, date, product_name, quantity, rate, amount 
+        FROM dairy_extra_purchases 
+        WHERE date >= %s AND date <= %s
+    """, (start_date, end_date))
     extra_purchases = {}
-    for row in extra_purchases_db:
+    for row in cur.fetchall():
         cid = row[1]
-        if cid not in extra_purchases:
-            extra_purchases[cid] = []
-        # Stringify date for JSON consistency
+        if cid not in extra_purchases: extra_purchases[cid] = []
         date_str = row[2].isoformat() if hasattr(row[2], "isoformat") else str(row[2])
-        extra_purchases[cid].append({
-            'id': row[0],
-            'date': date_str,
-            'product': row[3],
-            'qty': row[4],
-            'rate': row[5],
-            'amount': row[6]
-        })
+        extra_purchases[cid].append({'id': row[0], 'date': date_str, 'product': row[3], 'qty': row[4], 'rate': row[5], 'amount': row[6]})
 
-    # Get all master products for the "Extra Milk" dropdown
+    # Get all master products
     cur.execute("SELECT name FROM dairy_master_products ORDER BY name ASC")
     all_product_names = [r[0] for r in cur.fetchall()]
     
-    # Fetch payments for this month
+    # Fetch payments
     cur.execute("SELECT id, customer_id, payment_date, amount, payment_mode FROM dairy_payments WHERE month=%s", (month_str,))
-    payments_data = cur.fetchall()
     payments = {}
-    for row in payments_data:
+    for row in cur.fetchall():
         cid = row[1]
-        if cid not in payments:
-            payments[cid] = []
-        # Stringify date for JSON consistency
+        if cid not in payments: payments[cid] = []
         date_str = row[2].isoformat() if hasattr(row[2], "isoformat") else str(row[2])
-        payments[cid].append({
-            'id': row[0],
-            'date': date_str,
-            'amount': row[3],
-            'mode': row[4]
-        })
+        payments[cid].append({'id': row[0], 'date': date_str, 'amount': row[3], 'mode': row[4]})
     
-    # Fetch monthly P/A totals and Total Qty for all PRODUCTS
-    monthly_totals = {} # {product_id: {'P': 0, 'A': 0, 'Total': 0}}
+    # Fetch monthly totals (using date range)
+    monthly_totals = {}
     cur.execute("""
         SELECT product_id, 
                COUNT(CASE WHEN quantity > 0 THEN 1 END) as present,
                COUNT(CASE WHEN quantity = 0 THEN 1 END) as absent,
                SUM(CASE WHEN quantity > 0 THEN quantity ELSE 0 END) as total_qty
         FROM dairy_logs 
-        WHERE to_char(date, 'YYYY-MM') = %s AND product_id IS NOT NULL
+        WHERE date >= %s AND date <= %s AND product_id IS NOT NULL
         GROUP BY product_id
-    """, (month_str,))
+    """, (start_date, end_date))
     for row in cur.fetchall():
         pid, p_cnt, a_cnt, t_qty = row
         monthly_totals[str(pid)] = {'P': p_cnt, 'A': a_cnt, 'Total': t_qty or 0}
         
-    # Check for unpaid customers (net_payable > 0 and no payment record for previous month)
-    # The requirement: highlight if date > 15th and they haven't paid their prior generated bill.
-    # The prior generated bill is stored in net_payable.
     unpaid_customers = []
     today_date = datetime.date.today()
-    
     if today_date.day > 15:
-        # We need to see if they paid. Since net_payable tracks the most recent generated bill (usually the previous month's bill),
-        # we check if they've made ANY payment in the *current* month_str view, OR we just check if net_payable > 0 and they haven't cleared it.
-        # Let's say: if net_payable > 0 and they have NO payment record in `payments` dict for the current selected month.
         cur.execute("SELECT id, net_payable FROM dairy_customers WHERE net_payable > 0")
         for cid, net_payable in cur.fetchall():
-            # If they don't have a payment recorded in the currently viewed month, flag them.
-            # (Admins typically log the payment in the current month's sheet when they collect it).
             total_paid = sum(float(p.get('amount') or 0) for p in payments.get(cid, []))
             if cid not in payments or total_paid < net_payable:
                 unpaid_customers.append(cid)
@@ -3068,103 +2973,90 @@ def delivery_history():
     staff_id = session.get("staff_id")
     month_str = request.args.get("month", datetime.date.today().strftime("%Y-%m"))
     year, month = map(int, month_str.split("-"))
+    num_days = calendar.monthrange(year, month)[1]
+    start_date = f"{year}-{month:02d}-01"
+    end_date = f"{year}-{month:02d}-{num_days}"
     
     conn = get_db_connection()
     cur = conn.cursor()
     
-    # Get assigned customers
+    # Get assigned customers and staff name
     cur.execute("""
-        SELECT id, name, phone, address, product_name, default_qty, price_per_liter, service_charge, 
-               delivery_staff_id, password, delivery_order, billing_type, 
-               last_bill_date, last_bill_generated_on, net_payable, email 
-        FROM dairy_customers 
-        WHERE delivery_staff_id=%s
-        ORDER BY delivery_order ASC, id ASC
+        SELECT c.id, c.name, c.phone, c.address, c.product_name, c.default_qty, c.price_per_liter, c.service_charge, 
+               c.delivery_staff_id, c.password, c.delivery_order, c.billing_type, 
+               c.last_bill_date, c.last_bill_generated_on, c.net_payable, c.email,
+               s.name as staff_name
+        FROM dairy_customers c
+        JOIN delivery_staff s ON c.delivery_staff_id = s.id
+        WHERE c.delivery_staff_id=%s
+        ORDER BY c.delivery_order ASC, c.id ASC
     """, (staff_id,))
     customers_raw = cur.fetchall()
-    
-    # Get staff name for consistency
-    cur.execute("SELECT name FROM delivery_staff WHERE id=%s", (staff_id,))
-    s_row = cur.fetchone()
-    staff_name = s_row[0] if s_row else "Unassigned"
+    staff_name = customers_raw[0][16] if customers_raw else "Unassigned"
 
-    # Enrich
+    customer_ids = [c[0] for c in customers_raw]
+    cust_products_map = {}
+    if customer_ids:
+        cur.execute("SELECT id, product_name, default_qty, price, customer_id FROM customer_products WHERE customer_id IN %s ORDER BY delivery_order", (tuple(customer_ids),))
+        for p in cur.fetchall():
+            cid = p[4]
+            if cid not in cust_products_map: cust_products_map[cid] = []
+            cust_products_map[cid].append(p[:4])
+
     customers = []
     cid_to_first_pid = {}
     for c in customers_raw:
-        cur.execute("SELECT id, product_name, default_qty, price FROM customer_products WHERE customer_id=%s ORDER BY delivery_order", (c[0],))
-        products = cur.fetchall()
-        c_list = list(c)
-        c_list.append(staff_name) # Index 16
-        c_list.append(products)   # Index 17
+        cid = c[0]
+        products = cust_products_map.get(cid, [])
+        c_list = list(c[:16])
+        c_list.append(staff_name)
+        c_list.append(products)
         customers.append(c_list)
-        if products:
-            cid_to_first_pid[c[0]] = products[0][0]
+        if products: cid_to_first_pid[cid] = products[0][0]
     
-    num_days = calendar.monthrange(year, month)[1]
     days = [datetime.date(year, month, day) for day in range(1, num_days + 1)]
-    
-    logs_map = {} # {product_id: {date: qty}}
-    monthly_totals = {} # {product_id: {P:x, A:y, Total:z}}
+    logs_map = {}
+    monthly_totals = {}
     extra_notes = {}
+    extra_purchases = {}
     
-    if customers:
-        customer_ids = [c[0] for c in customers]
-        cust_placeholders = ','.join('%s' for _ in customer_ids)
-        
-        # Fetch logs for assigned customers
-        # Need to fetch by product_id primarily, but filtering by customer_id helps performance
-        cur.execute(f"""
+    if customer_ids:
+        # Logs
+        cur.execute("""
             SELECT customer_id, date, time_slot, quantity, product_id
             FROM dairy_logs 
-            WHERE to_char(date, 'YYYY-MM') = %s AND customer_id IN ({cust_placeholders})
-        """, [month_str] + customer_ids)
-        logs = cur.fetchall()
-        
-        for log in logs:
-            cid, date, slot, qty, pid = log
-            if not pid:
-                pid = cid_to_first_pid.get(cid)
-                
+            WHERE date >= %s AND date <= %s AND customer_id IN %s
+        """, (start_date, end_date, tuple(customer_ids)))
+        for cid, date, slot, qty, pid in cur.fetchall():
+            if not pid: pid = cid_to_first_pid.get(cid)
             if pid:
                 pid_str = str(pid)
-                if pid_str not in logs_map:
-                    logs_map[pid_str] = {}
-                # Stringify date key for JSON compatibility
+                if pid_str not in logs_map: logs_map[pid_str] = {}
                 date_str = date.isoformat() if hasattr(date, "isoformat") else str(date)
                 logs_map[pid_str][date_str] = qty
         
-        # Monthly Totals per Product
-        cur.execute(f"""
-            SELECT product_id, 
-                   COUNT(CASE WHEN quantity > 0 THEN 1 END) as present,
-                   COUNT(CASE WHEN quantity = 0 THEN 1 END) as absent,
-                   SUM(CASE WHEN quantity > 0 THEN quantity ELSE 0 END) as total_qty
+        # Totals
+        cur.execute("""
+            SELECT product_id, COUNT(CASE WHEN quantity > 0 THEN 1 END), COUNT(CASE WHEN quantity = 0 THEN 1 END), SUM(CASE WHEN quantity > 0 THEN quantity ELSE 0 END)
             FROM dairy_logs 
-            WHERE to_char(date, 'YYYY-MM') = %s AND customer_id IN ({cust_placeholders}) AND product_id IS NOT NULL
+            WHERE date >= %s AND date <= %s AND customer_id IN %s AND product_id IS NOT NULL
             GROUP BY product_id
-        """, [month_str] + customer_ids)
-        for row in cur.fetchall():
-            pid, p_cnt, a_cnt, t_qty = row
+        """, (start_date, end_date, tuple(customer_ids)))
+        for pid, p_cnt, a_cnt, t_qty in cur.fetchall():
             monthly_totals[str(pid)] = {'P': p_cnt, 'A': a_cnt, 'Total': t_qty or 0}
 
-        # Fetch extra notes
-        cur.execute(f"SELECT customer_id, notes FROM dairy_extra_notes WHERE month=%s AND customer_id IN ({cust_placeholders})", [month_str] + customer_ids)
-        for row in cur.fetchall():
-            extra_notes[row[0]] = row[1]
-    
-    # Fetch extra purchases for these customers
-    extra_purchases = {}
-    if customers:
-        cur.execute(f"SELECT id, customer_id, date, product_name, quantity, rate, amount FROM dairy_extra_purchases WHERE to_char(date, 'YYYY-MM') = %s AND customer_id IN ({cust_placeholders})", [month_str] + customer_ids)
+        # Notes
+        cur.execute("SELECT customer_id, notes FROM dairy_extra_notes WHERE month=%s AND customer_id IN %s", (month_str, tuple(customer_ids)))
+        extra_notes = {row[0]: row[1] for row in cur.fetchall()}
+
+        # Extra Purchases
+        cur.execute("SELECT id, customer_id, date, product_name, quantity, rate, amount FROM dairy_extra_purchases WHERE date >= %s AND date <= %s AND customer_id IN %s", (start_date, end_date, tuple(customer_ids)))
         for row in cur.fetchall():
             cid = row[1]
             if cid not in extra_purchases: extra_purchases[cid] = []
-            # Stringify date for JSON consistency
             date_str = row[2].isoformat() if hasattr(row[2], "isoformat") else str(row[2])
             extra_purchases[cid].append({'id': row[0], 'date': date_str, 'product': row[3], 'qty': row[4], 'rate': row[5], 'amount': row[6]})
 
-    # Get all master products
     cur.execute("SELECT name FROM dairy_master_products ORDER BY name ASC")
     all_product_names = [r[0] for r in cur.fetchall()]
 
