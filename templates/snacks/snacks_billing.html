@@ -411,7 +411,9 @@
         const [billMode, setBillMode] = useState('retail');
         const [discount, setDiscount] = useState(0);
         const [customerName, setCustomerName] = useState('');
-        const [paymentMode, setPaymentMode] = useState('Cash');
+    const [paymentMode, setPaymentMode] = useState('Cash');
+    const [amountGiven, setAmountGiven] = useState(0);
+
         const [scannerActive, setScannerActive] = useState(false);
         const [scannerReady, setScannerReady] = useState(true);
         const [topItems, setTopItems] = useState([]);
@@ -617,6 +619,22 @@
                         <div style={ { display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem', fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)' } }>
                             <span>Total</span>
                             <span>₹{grandTotal.toFixed(2)}</span>
+                        </div>
+
+                        <div className="form-group" style={{ marginBottom: '1rem' }}>
+                            <label style={{ color: 'var(--text-main)' }}>Amount Given (₹)</label>
+                            <input
+                                type="number"
+                                value={amountGiven}
+                                onChange={(e) => setAmountGiven(parseFloat(e.target.value) || 0)}
+                                placeholder="Enter cash received"
+                                className="form-control"
+                                style={{ width: '80px', textAlign: 'right', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 5px', background: 'var(--input-bg)', color: 'var(--text-main)' }}
+                            />
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', fontSize: '1.2rem', fontWeight: 600, color: 'var(--primary)' }}>
+                            <span>Change</span>
+                            <span>₹{(amountGiven - grandTotal).toFixed(2)}</span>
                         </div>
 
                         <div className="form-group" style={ { marginBottom: '1rem' } }>
